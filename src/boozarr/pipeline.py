@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import shutil
+import tempfile
 import traceback
 import zipfile
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from pathlib import Path
+from typing import Any
 
 from boozarr.epub import EpubWrapper
 
@@ -38,7 +38,27 @@ class Pipeline:
         if existing == "ok":
             return {"file_path": str(epub_path), "status": "skip", "issues": 0, "fixes": 0}
 
-        total_issues, total_fixes, overall = self._run_processors(wrapper, epub_path)
+        if self.fix:
+            # Create backup before modifying (only in fix mode)
+            if self.backup:
+                bak_path = epub_path.with_suffix(".epub.bak")
+                if not bak_path.exists():
+                    shutil.copy2(str(epub_path), str(bak_path))
+
+            extract_dir = Path(tempfile.mkdtemp(prefix="boozarr_"))
+            try:
+                wrapper.extract(extract_dir)
+                total_issues, total_fixes, overall = self._run_processors(wrapper, epub_path)
+                # Write to temp path then rename atomically to avoid data loss on crash
+                tmp_path = epub_path.with_suffix(".epub.tmp")
+                wrapper.repack(tmp_path)
+                tmp_path.replace(epub_path)
+                # Recompute hash from the (now modified) file
+                wrapper.refresh_hash()
+            finally:
+                shutil.rmtree(extract_dir, ignore_errors=True)
+        else:
+            total_issues, total_fixes, overall = self._run_processors(wrapper, epub_path)
 
         if overall == "error":
             status = "error"

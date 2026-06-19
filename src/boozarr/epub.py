@@ -69,3 +69,10 @@ class EpubWrapper:
             for fpath in sorted(self._extract_dir.rglob("*")):
                 if fpath.is_file():
                     zf.write(fpath, str(fpath.relative_to(self._extract_dir)))
+
+    def refresh_hash(self) -> None:
+        """Recompute the SHA-256 hash from the current file on disk.
+
+        Call after repack() to keep the hash in sync with the modified file.
+        """
+        self.file_hash = self._compute_hash(self.path)
