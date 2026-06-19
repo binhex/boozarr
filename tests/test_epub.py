@@ -39,6 +39,13 @@ class TestEpubWrapperValidation:
         with pytest.raises(zipfile.BadZipFile):
             EpubWrapper(epub_path).validate()
 
+    def test_validate_missing_container(self, tmp_path: Path) -> None:
+        epub_path = tmp_path / "nocontainer.epub"
+        with zipfile.ZipFile(epub_path, "w") as zf:
+            zf.writestr("OEBPS/content.opf", "<package/>")
+        with pytest.raises(ValueError, match="Missing EPUB structure"):
+            EpubWrapper(epub_path).validate()
+
     def test_validate_missing_opf(self, tmp_path: Path) -> None:
         epub_path = tmp_path / "noopf.epub"
         with zipfile.ZipFile(epub_path, "w") as zf:
@@ -47,7 +54,7 @@ class TestEpubWrapperValidation:
             EpubWrapper(epub_path).validate()
 
 
-class TestEpubWrapperRepack:
+class TestEpubWrapperExtract:
     def test_extract_and_repack_round_trip(self, tmp_path: Path) -> None:
         epub_path = tmp_path / "input.epub"
         with zipfile.ZipFile(epub_path, "w") as zf:
@@ -76,3 +83,27 @@ class TestEpubWrapperRepack:
         wrapper = EpubWrapper(epub_path)
         with pytest.raises(RuntimeError, match="No extracted directory"):
             wrapper.repack(tmp_path / "out.epub")
+
+    def test_extract_rejects_zip_slip(self, tmp_path: Path) -> None:
+        epub_path = tmp_path / "malicious.epub"
+        with zipfile.ZipFile(epub_path, "w") as zf:
+            zf.writestr("META-INF/container.xml", "<container/>")
+            zf.writestr("OEBPS/content.opf", "<package/>")
+            zf.writestr("../outside.txt", "escaped!")
+        wrapper = EpubWrapper(epub_path)
+        with pytest.raises(ValueError, match="path traversal"):
+            wrapper.extract(tmp_path / "out")
+
+
+class TestEpubWrapperReadFile:
+    def test_read_file_rejects_path_traversal(self, tmp_path: Path) -> None:
+        epub_path = tmp_path / "test.epub"
+        with zipfile.ZipFile(epub_path, "w") as zf:
+            zf.writestr("META-INF/container.xml", "<container/>")
+            zf.writestr("OEBPS/content.opf", "<package/>")
+            zf.writestr("OEBPS/ch1.xhtml", "<p>hello</p>")
+        wrapper = EpubWrapper(epub_path)
+        extract_dir = tmp_path / "extracted"
+        wrapper.extract(extract_dir)
+        with pytest.raises(ValueError, match="Path traversal"):
+            wrapper.read_file("../../etc/passwd")

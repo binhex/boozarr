@@ -56,6 +56,27 @@ class EpubWrapper:
                     raise ValueError(f"ZIP entry '{member.filename}' attempts path traversal")
                 zf.extract(member, target_dir)
 
+    def read_file(self, relative_path: str) -> str:
+        """Read a file from the EPUB: from extracted dir if present, else from the ZIP."""
+        if self._extract_dir is not None:
+            fpath = (self._extract_dir / relative_path).resolve()
+            if not str(fpath).startswith(str(self._extract_dir.resolve()) + "/"):
+                raise ValueError(f"Path traversal detected: {relative_path}")
+            return fpath.read_text(encoding="utf-8")
+        with zipfile.ZipFile(self.path, "r") as zf:
+            return zf.read(relative_path).decode("utf-8")
+
+    def get_opf_path(self) -> str:
+        """Read META-INF/container.xml and return the OPF file path."""
+        import xml.etree.ElementTree as ET
+
+        container = ET.fromstring(self.read_file("META-INF/container.xml"))
+        ns = {"c": "urn:oasis:names:tc:opendocument:xmlns:container"}
+        rootfile = container.find(".//c:rootfile", ns)
+        if rootfile is not None:
+            return rootfile.get("full-path", "OEBPS/content.opf")
+        return "OEBPS/content.opf"
+
     def write_file(self, file_path: Path, content: str) -> None:
         """Write *content* to a file relative to the extracted tree."""
         file_path.parent.mkdir(parents=True, exist_ok=True)

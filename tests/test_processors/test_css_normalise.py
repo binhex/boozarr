@@ -2,34 +2,119 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+import zipfile
+from typing import TYPE_CHECKING
 
+from boozarr.epub import EpubWrapper
+
+if TYPE_CHECKING:
+    from pathlib import Path
 from boozarr.processors.css_normalise import CssNormaliseProcessor
 
 
-class TestCssNormaliseCheck:
-    def test_no_issues_when_standard(self) -> None:
-        epub = MagicMock()
-        epub.css_properties = {"font-size": "1em", "line-height": "1.5", "text-align": "left"}
-        assert CssNormaliseProcessor().check(epub) == []
+class TestCssNormaliseEdgeCases:
+    def test_check_without_extract_returns_empty(self) -> None:
+        from unittest.mock import MagicMock
 
-    def test_issue_on_nonstandard_font_size(self) -> None:
-        epub = MagicMock()
-        epub.css_properties = {"font-size": "2em", "line-height": "1.5"}
-        issues = CssNormaliseProcessor().check(epub)
+        issues = CssNormaliseProcessor().check(MagicMock())
+        assert issues == []
+
+    def test_fix_without_extract_returns_empty(self) -> None:
+        from unittest.mock import MagicMock
+
+        fixes = CssNormaliseProcessor().fix(MagicMock(), [], {})
+        assert fixes == []
+
+    def test_detects_issues_from_inline_styles(self, tmp_path: Path) -> None:
+        epub_path = tmp_path / "inline.epub"
+        with zipfile.ZipFile(epub_path, "w") as zf:
+            zf.writestr("META-INF/container.xml", "<container/>")
+            zf.writestr("OEBPS/content.opf", "<package/>")
+            zf.writestr(
+                "OEBPS/ch1.xhtml",
+                "<html><head><style>body { font-size: 3em; }</style></head><body><p>Hi</p></body></html>",
+            )
+        wrapper = EpubWrapper(epub_path)
+        extract_dir = tmp_path / "extracted"
+        wrapper.extract(extract_dir)
+        issues = CssNormaliseProcessor().check(wrapper)
+        assert len(issues) >= 1
+
+    def test_fix_preserves_css_comments(self, tmp_path: Path) -> None:
+        css_content = """/* header */
+p { font-size: 3em; /* inline comment */ line-height: 2.5; }
+/* footer */"""
+        epub_path = tmp_path / "comments.epub"
+        with zipfile.ZipFile(epub_path, "w") as zf:
+            zf.writestr("META-INF/container.xml", "<container/>")
+            zf.writestr("OEBPS/content.opf", "<package/>")
+            zf.writestr("OEBPS/styles.css", css_content)
+            zf.writestr("OEBPS/ch1.xhtml", "<html><body><p>Text</p></body></html>")
+        wrapper = EpubWrapper(epub_path)
+        extract_dir = tmp_path / "extracted"
+        wrapper.extract(extract_dir)
+        processor = CssNormaliseProcessor()
+        issues = processor.check(wrapper)
+        assert len(issues) >= 1
+        fixes = processor.fix(wrapper, issues, {"font_size": "1em", "line_height": "1.5"})
+        assert len(fixes) >= 1
+        wrapper.repack(epub_path)
+        with zipfile.ZipFile(epub_path, "r") as zf:
+            css = zf.read("OEBPS/styles.css").decode()
+        assert "/* header */" in css
+        assert "/* inline comment */" in css
+        assert "/* footer */" in css
+        assert "font-size: 1em" in css
+        assert "3em" not in css
+
+
+class TestCssNormaliseProcessorIntegration:
+    """Integration tests using real EPUBs with CSS files."""
+
+    def _make_epub_with_css(self, path: Path, css_content: str) -> None:
+        with zipfile.ZipFile(path, "w") as zf:
+            zf.writestr(
+                "META-INF/container.xml",
+                '<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>',
+            )
+            zf.writestr(
+                "content.opf",
+                '<?xml version="1.0" encoding="UTF-8"?><package xmlns:dc="http://purl.org/dc/elements/1.1/"><metadata><dc:title>Test</dc:title></metadata></package>',
+            )
+            zf.writestr("OEBPS/styles.css", css_content)
+            zf.writestr("OEBPS/ch1.xhtml", "<html><body><p>Text</p></body></html>")
+
+    def test_no_issues_when_standard(self, tmp_path: Path) -> None:
+        epub_path = tmp_path / "book.epub"
+        self._make_epub_with_css(epub_path, "body { font-size: 1em; line-height: 1.5; text-align: left; }")
+        wrapper = EpubWrapper(epub_path)
+        extract_dir = tmp_path / "extracted"
+        wrapper.extract(extract_dir)
+        issues = CssNormaliseProcessor().check(wrapper)
+        assert issues == []
+
+    def test_issue_on_nonstandard_font_size(self, tmp_path: Path) -> None:
+        epub_path = tmp_path / "book.epub"
+        self._make_epub_with_css(epub_path, "body { font-size: 2em; line-height: 1.5; }")
+        wrapper = EpubWrapper(epub_path)
+        extract_dir = tmp_path / "extracted"
+        wrapper.extract(extract_dir)
+        issues = CssNormaliseProcessor().check(wrapper)
         assert len(issues) == 1
 
-    def test_issue_on_nonstandard_margin(self) -> None:
-        epub = MagicMock()
-        epub.css_properties = {"font-size": "1em", "margin": "2em"}
-        issues = CssNormaliseProcessor().check(epub)
-        assert len(issues) == 1
-
-
-class TestCssNormaliseFix:
-    def test_fix_applies_mapped_values(self) -> None:
-        epub = MagicMock()
-        issue = MagicMock(location="CSS (font-size)", description="Non-standard font-size: '2em'")
-        fixes = CssNormaliseProcessor().fix(epub, [issue], {"font_size": "1em"})
-        assert len(fixes) == 1
-        assert "1em" in fixes[0].new_value
+    def test_fix_applies_values(self, tmp_path: Path) -> None:
+        epub_path = tmp_path / "book.epub"
+        self._make_epub_with_css(epub_path, "body { font-size: 2em; line-height: 2; }")
+        wrapper = EpubWrapper(epub_path)
+        extract_dir = tmp_path / "extracted"
+        wrapper.extract(extract_dir)
+        processor = CssNormaliseProcessor()
+        issues = processor.check(wrapper)
+        assert len(issues) >= 1
+        fixes = processor.fix(wrapper, issues, {"font_size": "1em", "line_height": "1.5"})
+        assert len(fixes) >= 1
+        wrapper.repack(epub_path)
+        with zipfile.ZipFile(epub_path, "r") as zf:
+            css = zf.read("OEBPS/styles.css").decode()
+        assert "font-size: 1em" in css
+        assert "line-height: 1.5" in css

@@ -2,40 +2,198 @@
 
 from __future__ import annotations
 
+import zipfile
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
+from boozarr.epub import EpubWrapper
 from boozarr.processors.chapters import ChaptersProcessor
+
+_SAMPLE_NCX = """<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE ncx PUBLIC "-//NISO//DTD ncx 2005-1//EN" "http://www.daisy.org/z3986/2005/ncx-2005-1.dtd">
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <head><meta name="dtb:uid" content="x"/></head>
+  <navMap>
+    <navPoint id="c1" playOrder="1"><navLabel><text>Ch1</text></navLabel><content src="ch1.xhtml"/></navPoint>
+  </navMap>
+</ncx>"""
 
 
 class TestChaptersCheck:
     def test_no_issues_when_toc_populated(self) -> None:
         epub = MagicMock()
-        epub.read_ncx.return_value = [{"label": "Ch1", "src": "ch1.xhtml"}]
+        epub.read_file.side_effect = lambda p: {"toc.ncx": _SAMPLE_NCX, "content.opf": "<package/>"}[p]
+        epub.get_opf_path.return_value = "content.opf"
         issues = ChaptersProcessor().check(epub)
         assert issues == []
 
     def test_issue_when_toc_empty(self) -> None:
         epub = MagicMock()
-        epub.read_ncx.return_value = []
+        epub.read_file.side_effect = lambda p: {"toc.ncx": "<ncx><navMap/></ncx>", "content.opf": "<package/>"}[p]
+        epub.get_opf_path.return_value = "content.opf"
         issues = ChaptersProcessor().check(epub)
         assert len(issues) == 1
         assert issues[0].processor == "chapters"
         assert issues[0].fix_possible is True
 
-    def test_issue_when_toc_missing(self) -> None:
+    def test_issue_when_ncx_missing(self) -> None:
         epub = MagicMock()
-        epub.read_ncx.side_effect = Exception("no ncx")
+        epub.read_file.side_effect = FileNotFoundError("no file")
+        epub.get_opf_path.return_value = "content.opf"
         issues = ChaptersProcessor().check(epub)
         assert len(issues) == 1
 
+    def test_issue_when_ncx_read_fails(self) -> None:
+        epub = MagicMock()
+        epub.get_opf_path.return_value = "content.opf"
+        opf_with_ncx = '<package xmlns:dc="http://purl.org/dc/elements/1.1/"><metadata><dc:title>T</dc:title></metadata><manifest><item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/></manifest></package>'
+        epub.read_file.side_effect = [opf_with_ncx, RuntimeError("NCX read failure")]
+        issues = ChaptersProcessor().check(epub)
+        assert len(issues) == 1
+        assert issues[0].processor == "chapters"
+
 
 class TestChaptersFix:
-    def test_fix_discovers_chapters(self) -> None:
+    def test_fix_returns_empty_when_not_extracted(self) -> None:
         epub = MagicMock()
-        epub.xhtml_files = [
-            {"path": "OEBPS/ch1.xhtml", "content": "<html><body><h1>Chapter 1</h1><p>text</p></body></html>"},
-            {"path": "OEBPS/ch2.xhtml", "content": "<html><body><h1>Chapter 2</h1><p>text</p></body></html>"},
-        ]
-        issues = [MagicMock()]
-        fixes = ChaptersProcessor().fix(epub, issues, {})  # type: ignore[arg-type]
+        epub._extract_dir = None
+        fixes = ChaptersProcessor().fix(epub, [MagicMock()], {})
+        assert fixes == []
+
+
+class TestChaptersFixIntegration:
+    """Integration tests for chapters fix() writing real NCX files."""
+
+    def test_fix_creates_ncx_from_h2_headings(self, tmp_path: Path) -> None:
+        """fix() should use h1/h2 fallback when no Chapter pattern matches."""
+        epub_path = tmp_path / "book.epub"
+        with zipfile.ZipFile(epub_path, "w") as zf:
+            zf.writestr(
+                "META-INF/container.xml",
+                '<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>',
+            )
+            zf.writestr(
+                "content.opf",
+                '<?xml version="1.0" encoding="UTF-8"?><package><metadata><dc:title>Test</dc:title></metadata></package>',
+            )
+            # XHTML with <h2> heading but no "Chapter" pattern
+            zf.writestr("OEBPS/section1.xhtml", "<html><body><h2>Introduction</h2><p>Text</p></body></html>")
+            zf.writestr("OEBPS/section2.xhtml", "<html><body><h2>The Beginning</h2><p>Text</p></body></html>")
+
+        wrapper = EpubWrapper(epub_path)
+        extract_dir = tmp_path / "extracted"
+        wrapper.extract(extract_dir)
+
+        processor = ChaptersProcessor()
+        issues = processor.check(wrapper)
+        assert len(issues) == 1  # no NCX at all
+
+        fixes = processor.fix(wrapper, issues, {})
         assert len(fixes) >= 1
+
+        wrapper.repack(epub_path)
+        wrapper2 = EpubWrapper(epub_path)
+        issues_after = processor.check(wrapper2)
+        assert len(issues_after) == 0
+
+
+class TestChaptersProcessorIntegration:
+    """Integration tests using real EpubWrapper and real EPUB files."""
+
+    _NCX_WITH_CHAPTERS = _SAMPLE_NCX
+
+    _OPF_WITH_NCX = """<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <metadata><dc:title>Test</dc:title></metadata>
+  <manifest>
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+    <item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine toc="ncx">
+    <itemref idref="ch1"/>
+  </spine>
+</package>"""
+
+    def _make_epub_with_ncx(self, path: Path) -> None:
+        with zipfile.ZipFile(path, "w") as zf:
+            zf.writestr(
+                "META-INF/container.xml",
+                '<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>',
+            )
+            zf.writestr("content.opf", self._OPF_WITH_NCX)
+            zf.writestr("toc.ncx", self._NCX_WITH_CHAPTERS)
+            zf.writestr("ch1.xhtml", "<html><body><h1>Chapter 1</h1><p>Text</p></body></html>")
+
+    def _make_epub_without_ncx(self, path: Path) -> None:
+        with zipfile.ZipFile(path, "w") as zf:
+            zf.writestr(
+                "META-INF/container.xml",
+                '<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>',
+            )
+            zf.writestr("content.opf", self._OPF_WITH_NCX)
+            zf.writestr("ch1.xhtml", "<html><body><h1>Chapter 1</h1><p>Text</p></body></html>")
+
+    def test_check_returns_zero_when_ncx_has_chapters(self, tmp_path: Path) -> None:
+        epub_path = tmp_path / "book.epub"
+        self._make_epub_with_ncx(epub_path)
+        wrapper = EpubWrapper(epub_path)
+        issues = ChaptersProcessor().check(wrapper)
+        assert len(issues) == 0, f"Expected 0 issues (NCX has navPoints), got {len(issues)}"
+
+    def test_check_returns_one_when_ncx_missing(self, tmp_path: Path) -> None:
+        epub_path = tmp_path / "book.epub"
+        self._make_epub_without_ncx(epub_path)
+        wrapper = EpubWrapper(epub_path)
+        issues = ChaptersProcessor().check(wrapper)
+        assert len(issues) == 1
+
+    def test_fix_creates_ncx_content(self, tmp_path: Path) -> None:
+        epub_path = tmp_path / "book.epub"
+        self._make_epub_without_ncx(epub_path)
+
+        wrapper = EpubWrapper(epub_path)
+        extract_dir = tmp_path / "extracted"
+        wrapper.extract(extract_dir)
+
+        processor = ChaptersProcessor()
+        issues = processor.check(wrapper)
+        assert len(issues) == 1
+
+        fixes = processor.fix(wrapper, issues, {})
+        assert len(fixes) > 0
+
+        wrapper.repack(epub_path)
+
+        with zipfile.ZipFile(epub_path, "r") as zf:
+            names = zf.namelist()
+            ncx_files = [n for n in names if n.endswith(".ncx")]
+            assert len(ncx_files) > 0
+            ncx_content = zf.read(ncx_files[0]).decode()
+            assert "navPoint" in ncx_content
+
+        wrapper2 = EpubWrapper(epub_path)
+        issues_after = processor.check(wrapper2)
+        assert len(issues_after) == 0, f"Expected 0 issues after fix, got {len(issues_after)}"
+
+    def test_check_returns_one_when_ncx_is_empty(self, tmp_path: Path) -> None:
+        """An EPUB with an empty NCX (no navPoints) should report 1 issue."""
+        epub_path = tmp_path / "book.epub"
+        with zipfile.ZipFile(epub_path, "w") as zf:
+            zf.writestr(
+                "META-INF/container.xml",
+                '<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>',
+            )
+            zf.writestr(
+                "content.opf",
+                '<?xml version="1.0"?><package><manifest><item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/></manifest></package>',
+            )
+            zf.writestr(
+                "toc.ncx",
+                '<?xml version="1.0"?><ncx xmlns="http://www.daisy.org/z3986/2005/ncx/"><navMap></navMap></ncx>',
+            )
+        wrapper = EpubWrapper(epub_path)
+        issues = ChaptersProcessor().check(wrapper)
+        assert len(issues) == 1

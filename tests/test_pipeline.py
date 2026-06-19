@@ -42,7 +42,7 @@ class _ModifyingProcessor:
 
 
 class TestPipelineFixBehaviour:
-    """Integration tests for --fix extract/repack behaviour."""
+    """Integration tests for --fix extract/repack/backup behaviour."""
 
     def test_fix_extracts_and_repacks(self, tmp_path: Path) -> None:
         """When fix=True, the EPUB should be extracted, processed, and repacked."""
@@ -53,21 +53,16 @@ class TestPipelineFixBehaviour:
         db = MagicMock(spec_set=["lookup_hash", "record_file", "log_event"])
         db.lookup_hash.return_value = None
 
-        pipeline = Pipeline(
-            db=db,
-            processors=[_ModifyingProcessor()],
-            config={},
-            fix=True,
-        )
+        pipeline = Pipeline(db=db, processors=[_ModifyingProcessor()], config={}, fix=True)
         result = pipeline.process_epub(epub_path)
 
         assert result["status"] != "error", f"Pipeline failed: {result}"
         new_hash = _compute_hash(epub_path)
-        assert new_hash != original_hash, f"EPUB was not modified: hash {original_hash} unchanged after --fix"
+        assert new_hash != original_hash, "EPUB was not modified: hash unchanged"
         assert result["fixes"] > 0, "No fixes were counted"
 
-    def test_fix_with_backup_creates_bak(self, tmp_path: Path) -> None:
-        """When backup=True and fix=True, a .bak copy of the original should exist."""
+    def test_backup_created_by_default_when_fixing(self, tmp_path: Path) -> None:
+        """Backup should be ON by default when fix=True (no --no-backup needed)."""
         epub_path = tmp_path / "input.epub"
         _make_epub(epub_path)
         original_content = epub_path.read_bytes()
@@ -75,40 +70,107 @@ class TestPipelineFixBehaviour:
         db = MagicMock(spec_set=["lookup_hash", "record_file", "log_event"])
         db.lookup_hash.return_value = None
 
-        pipeline = Pipeline(
-            db=db,
-            processors=[_ModifyingProcessor()],
-            config={},
-            fix=True,
-            backup=True,
-        )
+        pipeline = Pipeline(db=db, processors=[_ModifyingProcessor()], config={}, fix=True)
         result = pipeline.process_epub(epub_path)
 
         assert result["status"] != "error", f"Pipeline failed: {result}"
         bak_path = epub_path.with_suffix(".epub.bak")
-        assert bak_path.exists(), f"Backup file {bak_path} not found"
+        assert bak_path.exists(), f"Backup should exist by default but {bak_path} not found"
         assert bak_path.read_bytes() == original_content, "Backup content differs from original"
 
-    def test_backup_not_created_in_dry_run(self, tmp_path: Path) -> None:
-        """When backup=True but fix=False, no .bak file should be created."""
+    def test_no_backup_when_flag_is_false(self, tmp_path: Path) -> None:
+        """When backup=False (--no-backup), no .bak file should be created."""
         epub_path = tmp_path / "input.epub"
         _make_epub(epub_path)
 
         db = MagicMock(spec_set=["lookup_hash", "record_file", "log_event"])
         db.lookup_hash.return_value = None
 
-        pipeline = Pipeline(
-            db=db,
-            processors=[_ModifyingProcessor()],
-            config={},
-            fix=False,
-            backup=True,
-        )
+        pipeline = Pipeline(db=db, processors=[_ModifyingProcessor()], config={}, fix=True, backup=False)
         result = pipeline.process_epub(epub_path)
 
         assert result["status"] != "error", f"Pipeline failed: {result}"
         bak_path = epub_path.with_suffix(".epub.bak")
-        assert not bak_path.exists(), f"Backup file {bak_path} should NOT exist in dry-run mode"
+        assert not bak_path.exists(), "Backup file should NOT exist when backup=False"
+
+    def test_no_backup_in_dry_run_even_with_default(self, tmp_path: Path) -> None:
+        """No backup should be created in dry-run mode even with default backup=True."""
+        epub_path = tmp_path / "input.epub"
+        _make_epub(epub_path)
+
+        db = MagicMock(spec_set=["lookup_hash", "record_file", "log_event"])
+        db.lookup_hash.return_value = None
+
+        pipeline = Pipeline(db=db, processors=[_ModifyingProcessor()], config={}, fix=False)
+        result = pipeline.process_epub(epub_path)
+
+        assert result["status"] != "error", f"Pipeline failed: {result}"
+        bak_path = epub_path.with_suffix(".epub.bak")
+        assert not bak_path.exists(), "Backup should NOT exist in dry-run mode"
+
+    def test_result_includes_fix_details(self, tmp_path: Path) -> None:
+        """The pipeline result should include a list of fix descriptions."""
+        epub_path = tmp_path / "input.epub"
+        _make_epub(epub_path)
+
+        db = MagicMock(spec_set=["lookup_hash", "record_file", "log_event"])
+        db.lookup_hash.return_value = None
+
+        pipeline = Pipeline(db=db, processors=[_ModifyingProcessor()], config={}, fix=True)
+        result = pipeline.process_epub(epub_path)
+
+        assert result["status"] != "error", f"Pipeline failed: {result}"
+        assert "fix_details" in result, "Result should include fix_details"
+        assert isinstance(result["fix_details"], list), "fix_details should be a list"
+
+
+class TestPipelineConfigAwareSkip:
+    """Tests that skip logic respects CLI config changes."""
+
+    def _make_epub(self, path: Path) -> None:
+        with zipfile.ZipFile(path, "w") as zf:
+            zf.writestr("META-INF/container.xml", "<container/>")
+            zf.writestr("OEBPS/content.opf", "<package/>")
+
+    def test_same_config_skips(self, tmp_path: Path) -> None:
+        """Same config on same file should skip."""
+        from boozarr.db import ProcessingDB
+
+        epub_path = tmp_path / "test.epub"
+        self._make_epub(epub_path)
+
+        db = ProcessingDB(tmp_path / "test.db")
+
+        # First run with config A
+        p1 = Pipeline(db=db, processors=[], config={"border": "1px"}, fix=True)
+        r1 = p1.process_epub(epub_path)
+        assert r1["status"] != "error"
+
+        # Second run with same config A — should skip
+        p2 = Pipeline(db=db, processors=[], config={"border": "1px"}, fix=True)
+        r2 = p2.process_epub(epub_path)
+        assert r2["status"] == "skip", f"Same config should skip, got {r2['status']}"
+
+    def test_different_config_does_not_skip(self, tmp_path: Path) -> None:
+        """Different config on same file should NOT skip."""
+        from boozarr.db import ProcessingDB
+
+        epub_path = tmp_path / "test.epub"
+        self._make_epub(epub_path)
+
+        db = ProcessingDB(tmp_path / "test.db")
+
+        # First run with config A
+        p1 = Pipeline(db=db, processors=[], config={"border": "1px"}, fix=True)
+        r1 = p1.process_epub(epub_path)
+        assert r1["status"] != "error"
+
+        # Second run with config B (different border) — should NOT skip
+        p2 = Pipeline(db=db, processors=[], config={"border": "100px"}, fix=True)
+        r2 = p2.process_epub(epub_path)
+        assert r2["status"] != "skip", (
+            f"Different config ({r2['status']}) should NOT skip. Bug: config_hash not checked in skip logic!"
+        )
 
 
 class TestPipeline:

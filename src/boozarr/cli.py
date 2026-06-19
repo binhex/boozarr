@@ -65,7 +65,9 @@ def _collect_processors(
     help="Directory containing EPUB files.",
 )
 @click.option("--fix", is_flag=True, default=False, help="Apply fixes (default: dry-run).")
-@click.option("--backup", is_flag=True, default=False, help="Create .bak copies before modifying.")
+@click.option(
+    "--no-backup", is_flag=True, default=False, help="Disable automatic .bak backup copies (backups are on by default)."
+)
 @click.option(
     "--db-path",
     default=_DEFAULT_DB_PATH,
@@ -104,7 +106,7 @@ def _collect_processors(
 def cli(
     library_path: str,
     fix: bool,
-    backup: bool,
+    no_backup: bool,
     db_path: str,
     log_path: str,
     log_level: str,
@@ -154,7 +156,7 @@ def cli(
         "check_external_links": check_external_links,
     }
 
-    pipeline = Pipeline(db=db, processors=processors, config=config, fix=fix, backup=backup)
+    pipeline = Pipeline(db=db, processors=processors, config=config, fix=fix, backup=not no_backup)
     report = Report()
 
     lib_path = Path(library_path)
@@ -174,6 +176,7 @@ def cli(
             result["status"],
             issues=result["issues"],
             fixes=result["fixes"],
+            fix_details=result.get("fix_details"),
         )
         logger.info(line)
 

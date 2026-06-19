@@ -41,10 +41,10 @@ Apply fixes:
 boozarr --library-path /path/to/epub/library --fix
 ```
 
-Create backups before modifying:
+Backups are created automatically (on by default). Disable with:
 
 ```bash
-boozarr --library-path /path/to/epub/library --fix --backup
+boozarr --library-path /path/to/epub/library --fix --no-backup
 ```
 
 Skip specific processors:
@@ -65,7 +65,7 @@ boozarr --library-path /path/to/epub/library --border 1px --margin 0 --padding 0
 |------|---------|-------------|
 | `--library-path` | *required* | Directory containing EPUB files to process (recursive scan) |
 | `--fix` | off | Apply fixes; default is dry-run (check-only) |
-| `--backup` | off | Create `.bak` copies before modifying |
+| `--no-backup` | off | Disable automatic `.bak` backups (on by default) |
 | `--db-path` | `<project>/db/boozarr.db` | SQLite database for tracking processed files |
 | `--log-path` | `<project>/logs/boozarr.log` | Log file path |
 | `--log-level` | `INFO` | Logging level (DEBUG, INFO, SUCCESS, WARNING, ERROR) |
