@@ -16,7 +16,7 @@ mixed content types.
 ### Usage
 
 ```bash
-epub-tool --library-path <DIR> [OPTIONS]
+boozarr --library-path <DIR> [OPTIONS]
 ```
 
 - **`--library-path`** (required): Path to the directory containing EPUB files
@@ -28,10 +28,10 @@ epub-tool --library-path <DIR> [OPTIONS]
 - **`--backup`** (flag): Create `.bak` copies of each EPUB (same directory,
   `.epub.bak` extension) before modifying. Compatible with `--fix`.
 
-- **`--db-path`** (default: `./epub-tool.db`): Path to the SQLite database
+- **`--db-path`** (default: `./boozarr.db`): Path to the SQLite database
   used to track processed files and avoid re-processing unchanged EPUBs.
 
-- **`--log-path`** (default: `./epub-tool.log`): Path to the log file.
+- **`--log-path`** (default: `./boozarr.log`): Path to the log file.
 
 ### Feature Toggles (enable/disable individual processors)
 
@@ -63,7 +63,7 @@ All processors are enabled by default. Use `--skip-*` to disable:
 ### Project Structure
 
 ```
-epub-tool/
+boozarr/
 ├── cli.py               # Click CLI entry point, argument parsing
 ├── pipeline.py          # Pipeline orchestrator — runs processors in sequence
 ├── epub.py              # EpubWrapper — unzip, inspect, manipulate, repack
@@ -301,6 +301,6 @@ Duration: 12.4s
 ## Future Possibilities (Post-MVP)
 
 - Multi-threaded processing for very large libraries (user-controlled thread count)
-- Configuration file (`epub-tool.toml`) for reusable processor settings
+- Configuration file (`boozarr.toml`) for reusable processor settings
 - Additional processors: image optimisation, font embedding checks,
   accessibility validation (alt text on images), ISBN lookup for metadata
