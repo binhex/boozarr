@@ -10,7 +10,7 @@ from boozarr.processors.base import BaseProcessor, Fix, Issue
 class LinksProcessor(BaseProcessor):
     name = "links"
 
-    def check(self, epub: Any) -> list[Issue]:
+    def check(self, epub: Any, config: dict[str, Any] | None = None) -> list[Issue]:
         issues: list[Issue] = []
         check_ext = getattr(epub, "check_external_links", False)
         for link in getattr(epub, "internal_links", []):

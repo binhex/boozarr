@@ -31,7 +31,7 @@ class _ModifyingProcessor:
 
     name = "modifier"
 
-    def check(self, epub: object) -> list:
+    def check(self, epub: object, config: dict | None = None) -> list:
         return [MagicMock()]
 
     def fix(self, epub: object, issues: list, config: dict) -> list:

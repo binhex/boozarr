@@ -22,7 +22,7 @@ Each fix detail line shows the property and the old→new transition:
 ```
 [WARN]   test.epub — 5 issues, 0 fixes (dry-run)
          - borders: border 5px → 1px
-         - borders: margin 3cm → 1em  
+         - borders: margin 3cm → 1em
          - borders: padding 5px → 10px
          - css_normalise: font-size 2em → 1em
 ```

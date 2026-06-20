@@ -151,7 +151,7 @@ class Pipeline:
         fix_details: list[str] = []
         for proc in self.processors:
             try:
-                issues = proc.check(wrapper)
+                issues = proc.check(wrapper, self.config)
                 total_issues += len(issues)
                 self.db.log_event(str(epub_path), proc.name, "check", f"{len(issues)} issues")
                 if issues:

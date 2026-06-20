@@ -12,7 +12,7 @@ _EXTRA = {".DS_Store", "thumbs.db", "Thumbs.db", "desktop.ini"}
 class CompressionProcessor(BaseProcessor):
     name = "compression"
 
-    def check(self, epub: Any) -> list[Issue]:
+    def check(self, epub: Any, config: dict[str, Any] | None = None) -> list[Issue]:
         issues: list[Issue] = []
         extra = [f for f in getattr(epub, "extra_files", []) if f.name in _EXTRA]
         if extra:

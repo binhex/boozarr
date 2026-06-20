@@ -36,7 +36,7 @@ class TestBaseProcessor:
         class P(BaseProcessor):
             name = "test"
 
-            def check(self, epub):  # type: ignore[no-untyped-def]
+            def check(self, epub, config=None):  # type: ignore[no-untyped-def]
                 return [Issue(self.name, "info", "loc", "desc")]
 
             def fix(self, epub, issues, config):  # type: ignore[no-untyped-def]

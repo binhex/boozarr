@@ -17,7 +17,7 @@ _REQUIRED = ["dc:title", "dc:creator", "dc:language", "dc:date"]
 class MetadataProcessor(BaseProcessor):
     name = "metadata"
 
-    def check(self, epub: Any) -> list[Issue]:
+    def check(self, epub: Any, config: dict[str, Any] | None = None) -> list[Issue]:
         """Read the OPF and report missing dc: metadata elements."""
         opf_path = epub.get_opf_path() if hasattr(epub, "get_opf_path") else "OEBPS/content.opf"
         try:

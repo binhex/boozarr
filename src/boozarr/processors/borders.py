@@ -115,17 +115,26 @@ class BordersProcessor(BaseProcessor):
         if new_content != content:
             file_path.write_text(new_content, encoding="utf-8")
 
-    def check(self, epub: Any) -> list[Issue]:
-        """Scan CSS files in the EPUB and report non-standard border/margin/padding values."""
+    def check(self, epub: Any, config: dict[str, Any] | None = None) -> list[Issue]:
+        """Scan CSS files and report non-standard values for configured properties only.
+
+        When *config* is ``None`` or empty, no issues are reported.
+        Each configured property is only reported when its CSS value differs
+        from the user's target.
+        """
         extract_dir = getattr(epub, "_extract_dir", None)
         if extract_dir is None:
             return []
 
+        target_map = self._build_target_map(config or {})
+        if not target_map:
+            return []
+
         props = self._collect_css_properties(extract_dir)
         issues: list[Issue] = []
-        for prop in _TARGET:
+        for prop, target in target_map.items():
             val = props.get(prop)
-            if val and val not in ("none", "0", "1em"):
+            if val and val.lower() != target.lower():
                 issues.append(
                     Issue(
                         processor=self.name,

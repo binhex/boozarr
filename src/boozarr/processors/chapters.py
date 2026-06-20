@@ -56,7 +56,7 @@ class ChaptersProcessor(BaseProcessor):
                 return href
         return None
 
-    def check(self, epub: Any) -> list[Issue]:
+    def check(self, epub: Any, config: dict[str, Any] | None = None) -> list[Issue]:
         """Check if the EPUB has an NCX table of contents with entries."""
         ncx_path = self._find_ncx_path(epub)
         if ncx_path is None:

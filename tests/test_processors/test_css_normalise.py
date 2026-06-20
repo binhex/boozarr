@@ -37,7 +37,7 @@ class TestCssNormaliseEdgeCases:
         wrapper = EpubWrapper(epub_path)
         extract_dir = tmp_path / "extracted"
         wrapper.extract(extract_dir)
-        issues = CssNormaliseProcessor().check(wrapper)
+        issues = CssNormaliseProcessor().check(wrapper, {"font_size": "1em"})
         assert len(issues) >= 1
 
     def test_fix_preserves_css_comments(self, tmp_path: Path) -> None:
@@ -54,7 +54,7 @@ p { font-size: 3em; /* inline comment */ line-height: 2.5; }
         extract_dir = tmp_path / "extracted"
         wrapper.extract(extract_dir)
         processor = CssNormaliseProcessor()
-        issues = processor.check(wrapper)
+        issues = processor.check(wrapper, {"font_size": "1em", "line_height": "1.5"})
         assert len(issues) >= 1
         fixes = processor.fix(wrapper, issues, {"font_size": "1em", "line_height": "1.5"})
         assert len(fixes) >= 1
@@ -90,8 +90,47 @@ class TestCssNormaliseProcessorIntegration:
         wrapper = EpubWrapper(epub_path)
         extract_dir = tmp_path / "extracted"
         wrapper.extract(extract_dir)
-        issues = CssNormaliseProcessor().check(wrapper)
+        issues = CssNormaliseProcessor().check(
+            wrapper, {"font_size": "1em", "line_height": "1.5", "text_align": "left"}
+        )
         assert issues == []
+
+    def test_check_only_reports_configured_properties(self, tmp_path: Path) -> None:
+        """When only --font-size is configured, check() must NOT report line-height or text-align."""
+        epub_path = tmp_path / "book.epub"
+        self._make_epub_with_css(
+            epub_path,
+            "body { font-size: 2em; line-height: 2; text-align: center; }",
+        )
+        wrapper = EpubWrapper(epub_path)
+        extract_dir = tmp_path / "extracted"
+        wrapper.extract(extract_dir)
+        # Only font_size configured — line-height and text-align must NOT be reported
+        config = {"font_size": "1em"}
+        issues = CssNormaliseProcessor().check(wrapper, config)
+        prop_names = {i.location.split()[-1].strip("()") for i in issues}
+        assert "text-align" not in prop_names, (
+            f"text-align should not be reported when not configured, got {prop_names}"
+        )
+        assert "line-height" not in prop_names, (
+            f"line-height should not be reported when not configured, got {prop_names}"
+        )
+        assert "font-size" in prop_names, "font-size should be reported"
+
+    def test_all_none_config_reports_nothing(self, tmp_path: Path) -> None:
+        """When no properties are configured (all-None dict), check() reports nothing."""
+        epub_path = tmp_path / "book.epub"
+        self._make_epub_with_css(
+            epub_path,
+            "body { font-size: 2em; line-height: 2; text-align: center; }",
+        )
+        wrapper = EpubWrapper(epub_path)
+        extract_dir = tmp_path / "extracted"
+        wrapper.extract(extract_dir)
+        # CLI-default config — all values None
+        config = {"font_size": None, "line_height": None, "text_align": None}
+        issues = CssNormaliseProcessor().check(wrapper, config)
+        assert issues == [], f"Expected 0 issues when nothing configured, got {len(issues)}"
 
     def test_issue_on_nonstandard_font_size(self, tmp_path: Path) -> None:
         epub_path = tmp_path / "book.epub"
@@ -99,7 +138,7 @@ class TestCssNormaliseProcessorIntegration:
         wrapper = EpubWrapper(epub_path)
         extract_dir = tmp_path / "extracted"
         wrapper.extract(extract_dir)
-        issues = CssNormaliseProcessor().check(wrapper)
+        issues = CssNormaliseProcessor().check(wrapper, {"font_size": "1em"})
         assert len(issues) == 1
 
     def test_fix_applies_values(self, tmp_path: Path) -> None:
@@ -109,7 +148,7 @@ class TestCssNormaliseProcessorIntegration:
         extract_dir = tmp_path / "extracted"
         wrapper.extract(extract_dir)
         processor = CssNormaliseProcessor()
-        issues = processor.check(wrapper)
+        issues = processor.check(wrapper, {"font_size": "1em", "line_height": "1.5"})
         assert len(issues) >= 1
         fixes = processor.fix(wrapper, issues, {"font_size": "1em", "line_height": "1.5"})
         assert len(fixes) >= 1
@@ -127,7 +166,7 @@ class TestCssNormaliseProcessorIntegration:
         extract_dir = tmp_path / "extracted"
         wrapper.extract(extract_dir)
         processor = CssNormaliseProcessor()
-        issues = processor.check(wrapper)
+        issues = processor.check(wrapper, {"font_size": "1em", "line_height": "1.5"})
         assert len(issues) >= 1
         fixes = processor.fix(wrapper, issues, {"font_size": "1em", "line_height": "1.5"})
         assert len(fixes) >= 1
