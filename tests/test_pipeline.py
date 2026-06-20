@@ -172,9 +172,36 @@ class TestPipelineConfigAwareSkip:
             f"Different config ({r2['status']}) should NOT skip. Bug: config_hash not checked in skip logic!"
         )
 
+    def test_same_config_skips_even_with_warn_status(self, tmp_path: Path) -> None:
+        """Same config should skip even when previous run had fixes (status='warn')."""
+        from unittest.mock import MagicMock
+
+        from boozarr.db import ProcessingDB
+
+        epub_path = tmp_path / "test.epub"
+        self._make_epub(epub_path)
+
+        db = ProcessingDB(tmp_path / "test.db")
+
+        # A processor that returns issues/fixes so the result status is "warn"
+        proc = MagicMock()
+        proc.name = "test_proc"
+        proc.check.return_value = [MagicMock()]
+        proc.fix.return_value = [MagicMock()]
+
+        # First run with config A — produces fixes → status 'warn'
+        p1 = Pipeline(db=db, processors=[proc], config={"border": "1px"}, fix=True)
+        r1 = p1.process_epub(epub_path)
+        assert r1["status"] == "warn", f"Expected 'warn' (has fixes), got '{r1['status']}'"
+
+        # Second run with same config A — should SKIP
+        p2 = Pipeline(db=db, processors=[proc], config={"border": "1px"}, fix=True)
+        r2 = p2.process_epub(epub_path)
+        assert r2["status"] == "skip", f"Same config with warn status should skip, got '{r2['status']}'"
+
 
 class TestPipeline:
-    def test_dry_run_does_not_fix(self, tmp_path: Path) -> None:
+    def test_dry_run_does_not_count_fixes(self, tmp_path: Path) -> None:
         epub_path = tmp_path / "test.epub"
         _make_epub(epub_path)
         db = MagicMock(spec_set=["lookup_hash", "record_file", "log_event"])
@@ -190,8 +217,9 @@ class TestPipeline:
 
         assert result["issues"] == 1
         assert result["fixes"] == 0
+        assert result["dry_run"] is True
         proc.check.assert_called_once()
-        proc.fix.assert_not_called()
+        proc.fix.assert_called_once()  # Called to generate fix_details, but fixes not counted
 
     def test_fix_mode_applies_fixes(self, tmp_path: Path) -> None:
         epub_path = tmp_path / "test.epub"

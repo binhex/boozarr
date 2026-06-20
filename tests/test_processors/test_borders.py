@@ -134,3 +134,26 @@ class TestBordersProcessorIntegration:
             css = zf.read("OEBPS/styles.css").decode()
         assert "1px" in css
         assert "5px" not in css
+
+    def test_fix_only_applies_specified_options(self, tmp_path: Path) -> None:
+        """When only --padding is specified, border and margin should NOT be changed."""
+        epub_path = tmp_path / "book.epub"
+        self._make_epub_with_css(
+            epub_path,
+            "body { border: 5px solid red; margin: 3cm; padding: 5px; }",
+        )
+        wrapper = EpubWrapper(epub_path)
+        extract_dir = tmp_path / "extracted"
+        wrapper.extract(extract_dir)
+        processor = BordersProcessor()
+        issues = processor.check(wrapper)
+        assert len(issues) >= 1
+        # Only specify padding — border and margin should be left alone
+        fixes = processor.fix(wrapper, issues, {"padding": "10"})
+        assert len(fixes) >= 1
+        wrapper.repack(epub_path)
+        with zipfile.ZipFile(epub_path, "r") as zf:
+            css = zf.read("OEBPS/styles.css").decode()
+        assert "padding: 10" in css, "padding should be updated"
+        assert "5px solid red" in css, "border should NOT be changed"
+        assert "3cm" in css, "margin should NOT be changed"

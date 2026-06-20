@@ -95,12 +95,12 @@ def _collect_processors(
 @click.option("--skip-css", is_flag=True, help="Skip CSS normalisation.")
 @click.option("--skip-links", is_flag=True, help="Skip link checker.")
 @click.option("--no-compress", is_flag=True, help="Skip compression.")
-@click.option("--border", default="none", metavar="<val>", help="Target border.")
-@click.option("--margin", default="1em", metavar="<val>", help="Target margin.")
-@click.option("--padding", default="0", metavar="<val>", help="Target padding.")
-@click.option("--font-size", default="1em", metavar="<val>", help="Target font size.")
-@click.option("--line-height", default="1.5", metavar="<val>", help="Target line height.")
-@click.option("--paragraph-spacing", default="1em", metavar="<val>", help="Target paragraph spacing.")
+@click.option("--text-align", default=None, metavar="<val>", help="Target text-align.")
+@click.option("--border", default=None, metavar="<val>", help="Target border.")
+@click.option("--margin", default=None, metavar="<val>", help="Target margin.")
+@click.option("--padding", default=None, metavar="<val>", help="Target padding.")
+@click.option("--font-size", default=None, metavar="<val>", help="Target font size.")
+@click.option("--line-height", default=None, metavar="<val>", help="Target line height.")
 @click.option("--check-external-links", is_flag=True, help="Validate external URLs.")
 @click.version_option(version=_VERSION, prog_name="boozarr")
 def cli(
@@ -116,12 +116,12 @@ def cli(
     skip_css: bool,
     skip_links: bool,
     no_compress: bool,
-    border: str,
-    margin: str,
-    padding: str,
-    font_size: str,
-    line_height: str,
-    paragraph_spacing: str,
+    border: str | None,
+    margin: str | None,
+    padding: str | None,
+    font_size: str | None,
+    line_height: str | None,
+    text_align: str | None,
     check_external_links: bool,
 ) -> None:
     """Boozarr - Automated EPUB Editor.
@@ -152,7 +152,7 @@ def cli(
         "padding": padding,
         "font_size": font_size,
         "line_height": line_height,
-        "paragraph_spacing": paragraph_spacing,
+        "text_align": text_align,
         "check_external_links": check_external_links,
     }
 
@@ -177,6 +177,7 @@ def cli(
             issues=result["issues"],
             fixes=result["fixes"],
             fix_details=result.get("fix_details"),
+            dry_run=result.get("dry_run", False),
         )
         logger.info(line)
 

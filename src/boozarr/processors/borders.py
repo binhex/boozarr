@@ -135,21 +135,37 @@ class BordersProcessor(BaseProcessor):
                 )
         return issues
 
+    @staticmethod
+    def _build_target_map(config: dict[str, Any]) -> dict[str, str]:
+        """Build a target map of CSS properties to rewrite, skipping None config values."""
+        target_map: dict[str, str] = {}
+        border_val = config.get("border")
+        if border_val is not None:
+            target_map["border"] = border_val
+        margin_val = config.get("margin")
+        if margin_val is not None:
+            target_map["margin"] = margin_val
+            target_map["margin-left"] = margin_val
+            target_map["margin-right"] = margin_val
+        padding_val = config.get("padding")
+        if padding_val is not None:
+            target_map["padding"] = padding_val
+            target_map["padding-left"] = padding_val
+            target_map["padding-right"] = padding_val
+        return target_map
+
     def fix(self, epub: Any, issues: list[Issue], config: dict[str, Any]) -> list[Fix]:
-        """Replace non-standard CSS values with user-configured targets."""
+        """Replace non-standard CSS values using a target map built from config.
+
+        The target map is built by :meth:`_build_target_map`. Only properties
+        present in that map are rewritten; fixes are only returned for issues
+        whose property has a configured target.
+        """
         extract_dir = getattr(epub, "_extract_dir", None)
         if extract_dir is None:
             return []
 
-        target_map = {
-            "border": config.get("border", "none"),
-            "margin": config.get("margin", "1em"),
-            "margin-left": config.get("margin", "1em"),
-            "margin-right": config.get("margin", "1em"),
-            "padding": config.get("padding", "0"),
-            "padding-left": config.get("padding", "0"),
-            "padding-right": config.get("padding", "0"),
-        }
+        target_map = self._build_target_map(config)
 
         # Apply fixes to all CSS files
         for css_file in extract_dir.rglob("*.css"):
@@ -162,7 +178,8 @@ class BordersProcessor(BaseProcessor):
                 location=i.location,
                 description=f"Normalised {i.location}",
                 old_value=i.description,
-                new_value=target_map.get(i.location.split()[-1].strip("()"), "none"),
+                new_value=target_map.get(i.location.split()[-1].strip("()"), ""),
             )
             for i in issues
+            if i.location.split()[-1].strip("()") in target_map
         ]

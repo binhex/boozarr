@@ -75,12 +75,13 @@ boozarr --library-path /path/to/epub/library --border 1px --margin 0 --padding 0
 | `--skip-css` | off | Skip CSS formatting normalisation |
 | `--skip-links` | off | Skip broken link checker |
 | `--no-compress` | off | Skip compression and cleanup |
-| `--border` | `none` | Target border value |
-| `--margin` | `1em` | Target margin value |
-| `--padding` | `0` | Target padding value |
-| `--font-size` | `1em` | Target base font size |
-| `--line-height` | `1.5` | Target line height |
-| `--paragraph-spacing` | `1em` | Target paragraph spacing |
+| `--border` | — | Target border value (only applied when specified) |
+| `--margin` | — | Target margin value (only applied when specified) |
+| `--padding` | — | Target padding value (only applied when specified) |
+| `--font-size` | — | Target base font size (only applied when specified) |
+| `--line-height` | — | Target line height (only applied when specified) |
+| `--paragraph-spacing` | — | Target paragraph spacing (only applied when specified) |
+| `--text-align` | — | Target text-align value (only applied when specified) |
 | `--check-external-links` | off | Validate external URLs via HEAD requests |
 
 ## How it works
@@ -93,7 +94,7 @@ For each EPUB file in the library:
 4. The modified EPUB is re-packed with compression.
 5. A result is logged per-file: `[OK]`, `[WARN]`, `[ERR]`, or `[SKIP]`.
 
-Unchanged files are skipped on re-run (tracked by SHA-256 hash in SQLite).
+Unchanged files are skipped on re-run (tracked by SHA-256 hash and CLI config hash in SQLite).
 
 ## Development
 

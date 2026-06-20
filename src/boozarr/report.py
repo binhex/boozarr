@@ -23,7 +23,12 @@ class Report:
         issues: int = 0,
         fixes: int = 0,
         fix_details: list[str] | None = None,
+        dry_run: bool = False,
     ) -> str:
+        """Format and store a per-file status line.
+
+        ``dry_run`` is appended to the line as a suffix when True.
+        """
         self.total += 1
         self.total_issues += issues
         self.total_fixes += fixes
@@ -41,7 +46,8 @@ class Report:
         else:
             tag = f"[?{status.upper()}?]"
             self.errors += 1
-        line = f"{tag:8} {filename:50} — {issues} issues, {fixes} fixes"
+        suffix = " (dry-run)" if dry_run else ""
+        line = f"{tag:8} {filename:50} — {issues} issues, {fixes} fixes{suffix}"
         if fix_details:
             line += "\n" + "\n".join(f"         - {d}" for d in fix_details)
             self._fix_details_list.extend(fix_details)

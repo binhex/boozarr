@@ -113,15 +113,32 @@ class CssNormaliseProcessor(BaseProcessor):
                 )
         return issues
 
+    @staticmethod
+    def _build_target_map(config: dict[str, Any]) -> dict[str, str]:
+        """Build a target map of CSS properties to rewrite, skipping None config values."""
+        target_map: dict[str, str] = {}
+        font_val = config.get("font_size")
+        if font_val is not None:
+            target_map["font-size"] = font_val
+        line_val = config.get("line_height")
+        if line_val is not None:
+            target_map["line-height"] = line_val
+        text_val = config.get("text_align")
+        if text_val is not None:
+            target_map["text-align"] = text_val
+        return target_map
+
     def fix(self, epub: Any, issues: list[Issue], config: dict[str, Any]) -> list[Fix]:
+        """Replace non-standard CSS values using a target map built from config.
+
+        The target map is built by :meth:`_build_target_map`. Only properties
+        present in that map are rewritten; fixes are only returned for issues
+        whose property has a configured target.
+        """
         extract_dir = getattr(epub, "_extract_dir", None)
         if extract_dir is None:
             return []
-        target_map = {
-            "font-size": config.get("font_size", "1em"),
-            "line-height": config.get("line_height", "1.5"),
-            "text-align": "left",
-        }
+        target_map = self._build_target_map(config)
         for css_file in extract_dir.rglob("*.css"):
             if css_file.is_file():
                 self._rewrite_css_file(css_file, target_map)
@@ -131,9 +148,10 @@ class CssNormaliseProcessor(BaseProcessor):
                 location=i.location,
                 description=f"Normalised {i.location}",
                 old_value=i.description,
-                new_value=f"{target_map.get(i.location.split()[-1].strip('()'), '1em')}",
+                new_value=target_map.get(i.location.split()[-1].strip("()"), ""),
             )
             for i in issues
+            if i.location.split()[-1].strip("()") in target_map
         ]
 
 
