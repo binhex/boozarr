@@ -15,6 +15,7 @@ _PARAGRAPH_PROPS = ["font-size", "line-height", "text-align"]
 _CSS_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
 _CSS_RULESET_RE = re.compile(r"([^{]+)\{([^}]*)\}")
 _CSS_PROPERTY_RE = re.compile(r"([\w-]+)\s*:\s*(.+?)\s*(?:;|$)")
+_OLD_VALUE_RE = re.compile(r"'([^']+)'")
 
 
 class CssNormaliseProcessor(BaseProcessor):
@@ -94,6 +95,11 @@ class CssNormaliseProcessor(BaseProcessor):
             file_path.write_text(new_content, encoding="utf-8")
 
     def check(self, epub: Any) -> list[Issue]:
+        """Scan CSS files and inline <style> blocks for non-standard paragraph-level values.
+
+        Reports font-size, line-height, and text-align values that deviate
+        from the expected defaults (1em, 1.5, left, 0).
+        """
         extract_dir = getattr(epub, "_extract_dir", None)
         if extract_dir is None:
             return []
@@ -134,6 +140,10 @@ class CssNormaliseProcessor(BaseProcessor):
         The target map is built by :meth:`_build_target_map`. Only properties
         present in that map are rewritten; fixes are only returned for issues
         whose property has a configured target.
+
+        Each returned ``Fix`` carries the original CSS value (extracted from
+        the issue description via :func:`_extract_old_value`) in ``old_value``
+        and the configured replacement in ``new_value``.
         """
         extract_dir = getattr(epub, "_extract_dir", None)
         if extract_dir is None:
@@ -147,12 +157,20 @@ class CssNormaliseProcessor(BaseProcessor):
                 processor=self.name,
                 location=i.location,
                 description=f"Normalised {i.location}",
-                old_value=i.description,
+                old_value=_extract_old_value(i.description),
                 new_value=target_map.get(i.location.split()[-1].strip("()"), ""),
             )
             for i in issues
             if i.location.split()[-1].strip("()") in target_map
         ]
+
+
+def _extract_old_value(description: str) -> str:
+    """Extract the CSS value from a description like ``"Non-standard font-size: '2em'"``."""
+    m = _OLD_VALUE_RE.search(description)
+    if m:
+        return m.group(1)
+    return description
 
 
 def _parse_css_text(css_text: str, props: dict[str, str]) -> None:

@@ -24,6 +24,8 @@ _TARGET = [
 _CSS_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
 _CSS_RULESET_RE = re.compile(r"([^{]+)\{([^}]*)\}")
 _CSS_PROPERTY_RE = re.compile(r"([\w-]+)\s*:\s*(.+?)\s*(?:;|$)")
+# Extract the CSS value from a description like "Non-standard padding: '10px'"
+_OLD_VALUE_RE = re.compile(r"'([^']+)'")
 
 
 class BordersProcessor(BaseProcessor):
@@ -160,6 +162,10 @@ class BordersProcessor(BaseProcessor):
         The target map is built by :meth:`_build_target_map`. Only properties
         present in that map are rewritten; fixes are only returned for issues
         whose property has a configured target.
+
+        Each returned ``Fix`` carries the original CSS value (extracted from
+        the issue description via ``_OLD_VALUE_RE``) in ``old_value`` and the
+        configured replacement in ``new_value``.
         """
         extract_dir = getattr(epub, "_extract_dir", None)
         if extract_dir is None:
@@ -172,14 +178,21 @@ class BordersProcessor(BaseProcessor):
             if css_file.is_file():
                 self._rewrite_css_file(css_file, target_map)
 
-        return [
-            Fix(
-                processor=self.name,
-                location=i.location,
-                description=f"Normalised {i.location}",
-                old_value=i.description,
-                new_value=target_map.get(i.location.split()[-1].strip("()"), ""),
+        # Build fixes with old_value extracted from the original description
+        fixes: list[Fix] = []
+        for i in issues:
+            prop = i.location.split()[-1].strip("()")
+            if prop not in target_map:
+                continue
+            old_match = _OLD_VALUE_RE.search(i.description)
+            old_value = old_match.group(1) if old_match else i.description
+            fixes.append(
+                Fix(
+                    processor=self.name,
+                    location=i.location,
+                    description=f"Normalised {i.location}",
+                    old_value=old_value,
+                    new_value=target_map[prop],
+                )
             )
-            for i in issues
-            if i.location.split()[-1].strip("()") in target_map
-        ]
+        return fixes

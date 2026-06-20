@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import Counter
 from dataclasses import dataclass, field
 
 
@@ -55,21 +54,47 @@ class Report:
         return line
 
     def final_summary(self, duration_s: float) -> str:
-        summary = (
-            f"Processed: {self.total} files\n"
-            f"  - Unchanged (skipped): {self.skipped}\n"
-            f"  - Issues found: {self.total_issues} across {self.total - self.skipped - self.errors} files\n"
-            f"  - Fixes applied: {self.total_fixes}\n"
-        )
+        """Render a table-style summary with aligned columns and box-drawing dividers.
+
+        Includes file/issue/fix counts and a per-processor fix breakdown when
+        ``_fix_details_list`` is non-empty.
+        """
+        from collections import defaultdict
+
+        lines: list[str] = []
+
+        # ─ top border
+        lines.append("─" * 40)
+
+        lines.append(f"  Files processed:  {self.total}  ({self.skipped} skipped, {self.errors} errors)")
+        lines.append(f"  Issues found:     {self.total_issues}")
+        lines.append(f"  Fixes applied:    {self.total_fixes}")
+
         if self._fix_details_list:
-            counter: Counter = Counter()
-            for d in self._fix_details_list:
-                processor = d.split(":", 1)[0] if ":" in d else "unknown"
-                counter[processor] += 1
-            parts = "  Fixes by processor:\n"
-            for proc, count in sorted(counter.items()):
-                parts += f"    - {proc}: {count}\n"
-            summary += parts
-        summary += f"  - Errors: {self.errors}\n"
-        summary += f"Duration: {duration_s:.1f}s"
-        return summary
+            # Group changes by processor
+            groups: dict[str, list[str]] = defaultdict(list)
+            for detail in self._fix_details_list:
+                if ":" in detail:
+                    processor, change = detail.split(":", 1)
+                    processor = processor.strip()
+                    change = change.strip()
+                else:
+                    processor = "unknown"
+                    change = detail
+                groups[processor].append(change)
+
+            lines.append("")
+            lines.append("  Fixes by processor:")
+            for proc in sorted(groups):
+                changes = groups[proc]
+                count = len(changes)
+                changes_str = ", ".join(changes)
+                # Pad processor name to 18 chars so counts align vertically
+                padded_proc = proc.ljust(18)
+                lines.append(f"    {padded_proc}{count}   {changes_str}")
+
+        # ─ bottom border
+        lines.append("─" * 40)
+        lines.append(f"  Duration: {duration_s:.1f}s")
+
+        return "\n".join(lines)

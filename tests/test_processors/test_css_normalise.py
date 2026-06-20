@@ -118,3 +118,24 @@ class TestCssNormaliseProcessorIntegration:
             css = zf.read("OEBPS/styles.css").decode()
         assert "font-size: 1em" in css
         assert "line-height: 1.5" in css
+
+    def test_fix_returns_correct_old_and_new_values(self, tmp_path: Path) -> None:
+        """Fix.old_value should be the parsed CSS value, new_value the configured target."""
+        epub_path = tmp_path / "book.epub"
+        self._make_epub_with_css(epub_path, "body { font-size: 2em; line-height: 2; }")
+        wrapper = EpubWrapper(epub_path)
+        extract_dir = tmp_path / "extracted"
+        wrapper.extract(extract_dir)
+        processor = CssNormaliseProcessor()
+        issues = processor.check(wrapper)
+        assert len(issues) >= 1
+        fixes = processor.fix(wrapper, issues, {"font_size": "1em", "line_height": "1.5"})
+        assert len(fixes) >= 1
+
+        for fix in fixes:
+            if "font-size" in fix.location:
+                assert fix.old_value == "2em"
+                assert fix.new_value == "1em"
+            elif "line-height" in fix.location:
+                assert fix.old_value == "2"
+                assert fix.new_value == "1.5"

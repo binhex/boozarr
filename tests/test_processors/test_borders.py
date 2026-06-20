@@ -11,6 +11,8 @@ from boozarr.processors.borders import BordersProcessor
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from boozarr.processors.base import Fix
+
 
 class TestBordersProcessorEdgeCases:
     def test_check_without_extract_returns_empty(self, tmp_path: Path) -> None:
@@ -157,3 +159,39 @@ class TestBordersProcessorIntegration:
         assert "padding: 10" in css, "padding should be updated"
         assert "5px solid red" in css, "border should NOT be changed"
         assert "3cm" in css, "margin should NOT be changed"
+
+    def test_fix_populates_old_and_new_values(self, tmp_path: Path) -> None:
+        """Fix objects returned by fix() should have correct old_value and new_value."""
+        epub_path = tmp_path / "book.epub"
+        self._make_epub_with_css(
+            epub_path,
+            "body { border: 5px dashed blue; margin: 3cm; padding: 10px; }",
+        )
+        wrapper = EpubWrapper(epub_path)
+        extract_dir = tmp_path / "extracted"
+        wrapper.extract(extract_dir)
+        processor = BordersProcessor()
+        issues = processor.check(wrapper)
+        assert len(issues) >= 1
+        fixes = processor.fix(wrapper, issues, {"border": "none", "margin": "0", "padding": "0"})
+        assert len(fixes) >= 1
+
+        # Build a dict of location -> fix for easy lookup
+        fix_by_location: dict[str, Fix] = {}
+        for f in fixes:
+            fix_by_location[f.location] = f
+
+        # Verify border fix
+        assert "CSS (border)" in fix_by_location
+        assert fix_by_location["CSS (border)"].old_value == "5px dashed blue"
+        assert fix_by_location["CSS (border)"].new_value == "none"
+
+        # Verify margin fix
+        assert "CSS (margin)" in fix_by_location
+        assert fix_by_location["CSS (margin)"].old_value == "3cm"
+        assert fix_by_location["CSS (margin)"].new_value == "0"
+
+        # Verify padding fix
+        assert "CSS (padding)" in fix_by_location
+        assert fix_by_location["CSS (padding)"].old_value == "10px"
+        assert fix_by_location["CSS (padding)"].new_value == "0"

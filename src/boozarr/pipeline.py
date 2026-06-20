@@ -142,7 +142,7 @@ class Pipeline:
         reported, but fixes are only counted and persisted when ``self.fix`` is
         True.
 
-        Returns a tuple of ``(total_issues, total_fixes, overall_status,
+        Returns a tuple of ``(total_issues, total_fixes, overall,
         fix_details)``.
         """
         total_issues = 0
@@ -162,9 +162,23 @@ class Pipeline:
                             str(epub_path), proc.name, "fix" if self.fix else "dry-run", f"{len(fixes)} fixes"
                         )
                         for fix in fixes:
-                            desc = getattr(fix, "description", str(fix))
-                            fix_details.append(f"{proc.name}: {desc}")
+                            fix_details.append(self._format_fix_detail(proc, fix))
             except Exception:
                 self.db.log_event(str(epub_path), proc.name, "error", traceback.format_exc())
                 overall = "error"
         return total_issues, total_fixes, overall, fix_details
+
+    @staticmethod
+    def _format_fix_detail(proc: Any, fix: Any) -> str:
+        """Format a single Fix into a string with old\u2192new values.
+
+        Falls back to ``fix.description`` when the fix has no meaningful
+        old/new values (non-CSS processors like chapters or metadata).
+        """
+        if not fix.old_value and not fix.new_value:
+            return f"{proc.name}: {fix.description}"
+        prop_name = fix.location.split()[-1].strip("()")
+        old = fix.old_value or "?"
+        new_val = fix.new_value or "?"
+        arrow = " \u2192 " if old != new_val else " == "
+        return f"{proc.name}: {prop_name} {old}{arrow}{new_val}"

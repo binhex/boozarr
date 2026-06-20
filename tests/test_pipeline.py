@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 from boozarr.pipeline import Pipeline
+from boozarr.processors.borders import BordersProcessor
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -122,6 +123,34 @@ class TestPipelineFixBehaviour:
         assert result["status"] != "error", f"Pipeline failed: {result}"
         assert "fix_details" in result, "Result should include fix_details"
         assert isinstance(result["fix_details"], list), "fix_details should be a list"
+
+    def test_fix_details_contains_old_new_values(self, tmp_path: Path) -> None:
+        """fix_details should contain old→new format with old_value/new_value."""
+        epub_path = tmp_path / "test.epub"
+        with zipfile.ZipFile(epub_path, "w") as zf:
+            zf.writestr("META-INF/container.xml", "<container/>")
+            zf.writestr("OEBPS/content.opf", "<package/>")
+            zf.writestr("OEBPS/style.css", "body { padding: 10px; }")
+
+        db = MagicMock(spec_set=["lookup_hash", "record_file", "log_event"])
+        db.lookup_hash.return_value = None
+
+        pipeline = Pipeline(
+            db=db,
+            processors=[BordersProcessor()],
+            config={"padding": "1px"},
+            fix=True,
+        )
+        result = pipeline.process_epub(epub_path)
+
+        assert result["status"] != "error", f"Pipeline failed: {result}"
+        details = result["fix_details"]
+        assert len(details) > 0, "Expected at least one fix_detail"
+        detail = details[0]
+        assert "padding" in detail, f"Expected 'padding' in fix_detail, got: {detail}"
+        assert "10px" in detail, f"Expected '10px' (old_value) in fix_detail, got: {detail}"
+        assert "1px" in detail, f"Expected '1px' (new_value) in fix_detail, got: {detail}"
+        assert "→" in detail or "==" in detail, f"Expected '→' or '==' arrow in fix_detail, got: {detail}"
 
 
 class TestPipelineConfigAwareSkip:

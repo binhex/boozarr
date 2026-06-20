@@ -39,9 +39,15 @@ class TestReport:
         r.log_line("c.epub", "error", issues=0, fixes=0)
         r.log_line("d.epub", "skip", issues=0, fixes=0)
         s = r.final_summary(duration_s=12.4)
-        assert "Processed: 4" in s
-        assert "Issues found: 2" in s
-        assert "Fixes applied: 3" in s
+        # Top and bottom borders
+        assert s.startswith("─" * 40)
+        assert "Files processed:  4  (1 skipped, 1 errors)" in s
+        assert "Issues found:     2" in s
+        assert "Fixes applied:    3" in s
+        # No fix breakdown since no fix_details were provided
+        assert "Fixes by processor:" not in s
+        assert "Duration: 12.4s" in s
+        assert s.endswith("Duration: 12.4s")
 
     def test_log_line_with_fix_details(self) -> None:
         r = Report()
@@ -78,10 +84,17 @@ class TestReport:
         )
         r.log_line("b.epub", "ok", issues=0, fixes=0)
         s = r.final_summary(duration_s=5.0)
-        assert "Fixes applied: 4" in s
-        assert "chapters" in s
-        assert "metadata" in s
-        assert "borders" in s
+        # Border lines
+        assert s.startswith("─" * 40)
+        assert "Files processed:  2  (0 skipped, 0 errors)" in s
+        assert "Issues found:     5" in s
+        assert "Fixes applied:    4" in s
+        # Fix breakdown section
+        assert "Fixes by processor:" in s
+        assert "borders           1   Normalised CSS (border)" in s
+        assert "chapters          1   Added 3 chapter entries" in s
+        assert "metadata          2   Inferred title 'T', Inferred author 'A'" in s
+        assert "Duration: 5.0s" in s
 
     def test_log_line_shows_dry_run_indicator(self) -> None:
         r = Report()
