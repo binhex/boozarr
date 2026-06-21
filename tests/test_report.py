@@ -89,11 +89,15 @@ class TestReport:
         assert "Files processed:  2  (0 skipped, 0 errors)" in s
         assert "Issues found:     5" in s
         assert "Fixes applied:    4" in s
-        # Fix breakdown section
+        # Fix breakdown section — count-only, no raw detail strings
         assert "Fixes by processor:" in s
-        assert "borders           1   Normalised CSS (border)" in s
-        assert "chapters          1   Added 3 chapter entries" in s
-        assert "metadata          2   Inferred title 'T', Inferred author 'A'" in s
+        assert "borders           1" in s
+        assert "chapters          1" in s
+        assert "metadata          2" in s
+        # Old format detail strings must NOT appear in summary
+        assert "Normalised CSS (border)" not in s
+        assert "Inferred title 'T'" not in s
+        assert "Added 3 chapter entries" not in s
         assert "Duration: 5.0s" in s
 
     def test_log_line_shows_dry_run_indicator(self) -> None:

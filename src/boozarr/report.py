@@ -75,23 +75,18 @@ class Report:
             groups: dict[str, list[str]] = defaultdict(list)
             for detail in self._fix_details_list:
                 if ":" in detail:
-                    processor, change = detail.split(":", 1)
+                    processor, _ = detail.split(":", 1)
                     processor = processor.strip()
-                    change = change.strip()
                 else:
                     processor = "unknown"
-                    change = detail
-                groups[processor].append(change)
+                groups[processor].append(detail)
 
             lines.append("")
             lines.append("  Fixes by processor:")
             for proc in sorted(groups):
-                changes = groups[proc]
-                count = len(changes)
-                changes_str = ", ".join(changes)
-                # Pad processor name to 18 chars so counts align vertically
+                count = len(groups[proc])
                 padded_proc = proc.ljust(18)
-                lines.append(f"    {padded_proc}{count}   {changes_str}")
+                lines.append(f"    {padded_proc}{count}")
 
         # ─ bottom border
         lines.append("─" * 40)
