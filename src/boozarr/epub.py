@@ -86,7 +86,8 @@ class EpubWrapper:
         """Re-zip the extracted directory into *output_path* with deflate compression."""
         if self._extract_dir is None or not self._extract_dir.exists():
             raise RuntimeError("No extracted directory to repack. Call extract() first.")
-        with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        compresslevel = getattr(self, "_compress_level", None)
+        with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED, compresslevel=compresslevel) as zf:
             for fpath in sorted(self._extract_dir.rglob("*")):
                 if fpath.is_file():
                     zf.write(fpath, str(fpath.relative_to(self._extract_dir)))

@@ -43,3 +43,25 @@ class TestCliBasic:
         epub.write_bytes(b"dummy epub")
         result = runner.invoke(cli, ["--library-path", str(lib)])
         assert result.exit_code == 0
+
+    def test_no_skip_flags_in_help(self) -> None:
+        """Skip flags (--skip-*, --no-compress) must not appear in --help."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["--help"])
+        assert result.exit_code == 0
+        skip_flags = [
+            "--skip-chapters",
+            "--skip-borders",
+            "--skip-metadata",
+            "--skip-css",
+            "--skip-links",
+            "--no-compress",
+        ]
+        for flag in skip_flags:
+            assert flag not in result.output, f"{flag} should not be in --help output"
+
+    def test_compress_flag_in_help(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(cli, ["--help"])
+        assert result.exit_code == 0
+        assert "--compress" in result.output

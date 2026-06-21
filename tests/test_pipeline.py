@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 
 from boozarr.pipeline import Pipeline
 from boozarr.processors.borders import BordersProcessor
+from boozarr.processors.compression import CompressionProcessor
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -295,3 +296,63 @@ class TestPipeline:
         result = pipeline.process_epub(epub_path)
 
         assert result["status"] == "error"
+
+
+class TestCompressionIntegration:
+    """Integration tests for compression in the pipeline."""
+
+    def test_compression_applied_when_no_extraneous_files(self, tmp_path: Path) -> None:
+        """Compression level must be applied even when EPUB has no extraneous files.
+
+        Regression test: check() returned [] → fix() never called →
+        _compress_level never set → repack() used default compression.
+        """
+        epub_path = tmp_path / "clean.epub"
+        with zipfile.ZipFile(epub_path, "w") as zf:
+            zf.writestr("META-INF/container.xml", "<container/>")
+            zf.writestr("OEBPS/content.opf", "<package/>")
+            zf.writestr("OEBPS/chapter1.xhtml", "<html><body>Chapter 1</body></html>")
+
+        original_hash = _compute_hash(epub_path)
+
+        db = MagicMock(spec_set=["lookup_hash", "record_file", "log_event"])
+        db.lookup_hash.return_value = None
+
+        # Process with compression level 0 (store, no compression) — smaller file
+        pipeline = Pipeline(
+            db=db,
+            processors=[CompressionProcessor()],
+            config={"compress": 0},
+            fix=True,
+        )
+        result = pipeline.process_epub(epub_path)
+
+        assert result["status"] != "error", f"Pipeline failed: {result}"
+        # Compression is now reported as an issue when configured
+        assert result["issues"] == 1, f"Expected 1 compression issue, got {result['issues']}"
+        assert any("compression" in d.lower() for d in result.get("fix_details", []))
+        # File should be modified (repacked)
+        new_hash = _compute_hash(epub_path)
+        assert new_hash != original_hash, "EPUB should be repacked (hash changed)"
+
+    def test_compression_not_applied_without_compress_config(self, tmp_path: Path) -> None:
+        """Without --compress, EPUB should be repacked with default compression."""
+        epub_path = tmp_path / "clean.epub"
+        with zipfile.ZipFile(epub_path, "w") as zf:
+            zf.writestr("META-INF/container.xml", "<container/>")
+            zf.writestr("OEBPS/content.opf", "<package/>")
+
+        db = MagicMock(spec_set=["lookup_hash", "record_file", "log_event"])
+        db.lookup_hash.return_value = None
+
+        pipeline = Pipeline(
+            db=db,
+            processors=[CompressionProcessor()],
+            config={},  # No compress configured
+            fix=True,
+        )
+        result = pipeline.process_epub(epub_path)
+
+        assert result["status"] != "error", f"Pipeline failed: {result}"
+        # Without compress config, no issues detected
+        assert result["issues"] == 0

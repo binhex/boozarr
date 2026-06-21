@@ -47,12 +47,6 @@ Backups are created automatically (on by default). Disable with:
 boozarr --library-path /path/to/epub/library --fix --no-backup
 ```
 
-Skip specific processors:
-
-```bash
-boozarr --library-path /path/to/epub/library --skip-chapters --skip-links
-```
-
 Customise CSS targets:
 
 ```bash
@@ -69,12 +63,6 @@ boozarr --library-path /path/to/epub/library --border 1px --margin 0 --padding 0
 | `--db-path` | `<project>/db/boozarr.db` | SQLite database for tracking processed files |
 | `--log-path` | `<project>/logs/boozarr.log` | Log file path |
 | `--log-level` | `INFO` | Logging level (DEBUG, INFO, SUCCESS, WARNING, ERROR) |
-| `--skip-chapters` | off | Skip chapter detection and ToC injection |
-| `--skip-borders` | off | Skip CSS border/margin normalisation |
-| `--skip-metadata` | off | Skip missing metadata fixer |
-| `--skip-css` | off | Skip CSS formatting normalisation |
-| `--skip-links` | off | Skip broken link checker |
-| `--no-compress` | off | Skip compression and cleanup |
 | `--border` | — | Target border value (only applied when specified) |
 | `--margin` | — | Target margin value (only applied when specified) |
 | `--padding` | — | Target padding value (only applied when specified) |
@@ -83,6 +71,7 @@ boozarr --library-path /path/to/epub/library --border 1px --margin 0 --padding 0
 | `--paragraph-spacing` | — | Target paragraph spacing (only applied when specified) |
 | `--text-align` | — | Target text-align value (only applied when specified) |
 | `--check-external-links` | off | Validate external URLs via HEAD requests |
+| `--compress` | — | Apply EPUB recompression level (0=store, 9=best, only when specified) |
 
 ## How it works
 

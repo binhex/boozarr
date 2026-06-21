@@ -31,29 +31,16 @@ _DEFAULT_DB_PATH = f"{_PROJECT_ROOT}/db/boozarr.db"
 _DEFAULT_LOGS_PATH = f"{_PROJECT_ROOT}/logs/boozarr.log"
 
 
-def _collect_processors(
-    skip_chapters: bool,
-    skip_borders: bool,
-    skip_metadata: bool,
-    skip_css: bool,
-    skip_links: bool,
-    no_compress: bool,
-) -> list[Any]:
-    """Build the list of enabled processors based on skip flags."""
-    enabled: list[Any] = []
-    if not skip_chapters:
-        enabled.append(ChaptersProcessor())
-    if not skip_borders:
-        enabled.append(BordersProcessor())
-    if not skip_metadata:
-        enabled.append(MetadataProcessor())
-    if not skip_css:
-        enabled.append(CssNormaliseProcessor())
-    if not skip_links:
-        enabled.append(LinksProcessor())
-    if not no_compress:
-        enabled.append(CompressionProcessor())
-    return enabled
+def _collect_processors() -> list[Any]:
+    """Build the list of all processors. Each processor self-regulates via its config."""
+    return [
+        ChaptersProcessor(),
+        BordersProcessor(),
+        MetadataProcessor(),
+        CssNormaliseProcessor(),
+        LinksProcessor(),
+        CompressionProcessor(),
+    ]
 
 
 @click.command(context_settings={"show_default": True})
@@ -89,12 +76,6 @@ def _collect_processors(
     metavar="<level>",
     help="Logging level.",
 )
-@click.option("--skip-chapters", is_flag=True, help="Skip chapter detection.")
-@click.option("--skip-borders", is_flag=True, help="Skip border normalisation.")
-@click.option("--skip-metadata", is_flag=True, help="Skip metadata fixer.")
-@click.option("--skip-css", is_flag=True, help="Skip CSS normalisation.")
-@click.option("--skip-links", is_flag=True, help="Skip link checker.")
-@click.option("--no-compress", is_flag=True, help="Skip compression.")
 @click.option("--text-align", default=None, metavar="<val>", help="Target text-align.")
 @click.option("--border", default=None, metavar="<val>", help="Target border.")
 @click.option("--margin", default=None, metavar="<val>", help="Target margin.")
@@ -102,6 +83,7 @@ def _collect_processors(
 @click.option("--font-size", default=None, metavar="<val>", help="Target font size.")
 @click.option("--line-height", default=None, metavar="<val>", help="Target line height.")
 @click.option("--check-external-links", is_flag=True, help="Validate external URLs.")
+@click.option("--compress", type=int, default=None, metavar="<0-9>", help="Apply EPUB recompression (0=store, 9=best).")
 @click.version_option(version=_VERSION, prog_name="boozarr")
 def cli(
     library_path: str,
@@ -110,12 +92,6 @@ def cli(
     db_path: str,
     log_path: str,
     log_level: str,
-    skip_chapters: bool,
-    skip_borders: bool,
-    skip_metadata: bool,
-    skip_css: bool,
-    skip_links: bool,
-    no_compress: bool,
     border: str | None,
     margin: str | None,
     padding: str | None,
@@ -123,6 +99,7 @@ def cli(
     line_height: str | None,
     text_align: str | None,
     check_external_links: bool,
+    compress: int | None,
 ) -> None:
     """Boozarr - Automated EPUB Editor.
 
@@ -137,14 +114,7 @@ def cli(
 
     db = ProcessingDB(Path(db_path))
 
-    processors = _collect_processors(
-        skip_chapters,
-        skip_borders,
-        skip_metadata,
-        skip_css,
-        skip_links,
-        no_compress,
-    )
+    processors = _collect_processors()
 
     config = {
         "border": border,
@@ -154,6 +124,7 @@ def cli(
         "line_height": line_height,
         "text_align": text_align,
         "check_external_links": check_external_links,
+        "compress": compress,
     }
 
     pipeline = Pipeline(db=db, processors=processors, config=config, fix=fix, backup=not no_backup)
