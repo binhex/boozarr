@@ -247,3 +247,37 @@ class TestBordersProcessorIntegration:
         assert "CSS (padding)" in fix_by_location
         assert fix_by_location["CSS (padding)"].old_value == "10px"
         assert fix_by_location["CSS (padding)"].new_value == "0"
+
+
+class TestBordersTargetMap:
+    """Tests for _build_target_map value normalization."""
+
+    def test_bare_number_gets_px(self) -> None:
+        tm = BordersProcessor._build_target_map({"margin": "50"})
+        assert tm["margin"] == "50px"
+        assert tm["margin-left"] == "50px"
+        assert tm["margin-right"] == "50px"
+
+    def test_number_with_unit_passes_through(self) -> None:
+        tm = BordersProcessor._build_target_map({"margin": "2em"})
+        assert tm["margin"] == "2em"
+
+    def test_zero_no_unit(self) -> None:
+        tm = BordersProcessor._build_target_map({"margin": "0"})
+        assert tm["margin"] == "0"
+
+    def test_none_skipped(self) -> None:
+        tm = BordersProcessor._build_target_map({"border": None, "margin": "10"})
+        assert "border" not in tm
+        assert tm["margin"] == "10px"
+
+    def test_non_numeric_passes_through(self) -> None:
+        tm = BordersProcessor._build_target_map({"border": "none"})
+        assert tm["border"] == "none"
+
+    def test_all_length_properties_normalized(self) -> None:
+        """border, margin, padding all get px appended to bare numbers."""
+        tm = BordersProcessor._build_target_map({"border": "5", "margin": "10", "padding": "20"})
+        assert tm["border"] == "5px"
+        assert tm["margin"] == "10px"
+        assert tm["padding"] == "20px"

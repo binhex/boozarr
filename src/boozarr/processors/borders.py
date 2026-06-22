@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 from boozarr.processors.base import BaseProcessor, Fix, Issue
+from boozarr.utils import normalize_css_value
 
 _TARGET = [
     "border",
@@ -72,7 +73,7 @@ class BordersProcessor(BaseProcessor):
                 prop_name = prop_match.group(1).strip().lower()
                 prop_value = prop_match.group(2).strip()
                 if prop_name in _TARGET:
-                    props[prop_name] = prop_value
+                    props[prop_name] = normalize_css_value(prop_value)
 
     @staticmethod
     def _rewrite_css_file(file_path: Path, target_map: dict[str, str]) -> None:
@@ -152,17 +153,17 @@ class BordersProcessor(BaseProcessor):
         target_map: dict[str, str] = {}
         border_val = config.get("border")
         if border_val is not None:
-            target_map["border"] = border_val
+            target_map["border"] = normalize_css_value(border_val)
         margin_val = config.get("margin")
         if margin_val is not None:
-            target_map["margin"] = margin_val
-            target_map["margin-left"] = margin_val
-            target_map["margin-right"] = margin_val
+            target_map["margin"] = normalize_css_value(margin_val)
+            target_map["margin-left"] = normalize_css_value(margin_val)
+            target_map["margin-right"] = normalize_css_value(margin_val)
         padding_val = config.get("padding")
         if padding_val is not None:
-            target_map["padding"] = padding_val
-            target_map["padding-left"] = padding_val
-            target_map["padding-right"] = padding_val
+            target_map["padding"] = normalize_css_value(padding_val)
+            target_map["padding-left"] = normalize_css_value(padding_val)
+            target_map["padding-right"] = normalize_css_value(padding_val)
         return target_map
 
     def fix(self, epub: Any, issues: list[Issue], config: dict[str, Any]) -> list[Fix]:

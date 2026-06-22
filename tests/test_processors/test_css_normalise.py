@@ -178,3 +178,28 @@ class TestCssNormaliseProcessorIntegration:
             elif "line-height" in fix.location:
                 assert fix.old_value == "2"
                 assert fix.new_value == "1.5"
+
+
+class TestCssNormaliseTargetMap:
+    """Tests for _build_target_map value normalization."""
+
+    def test_bare_number_gets_px(self) -> None:
+        tm = CssNormaliseProcessor._build_target_map({"font_size": "14"})
+        assert tm["font-size"] == "14px"
+
+    def test_number_with_unit_passes_through(self) -> None:
+        tm = CssNormaliseProcessor._build_target_map({"font_size": "1.5em"})
+        assert tm["font-size"] == "1.5em"
+
+    def test_line_height_unitless_passes_through(self) -> None:
+        """Line-height 1.5 is valid unitless CSS — '1.5' contains a dot, not pure digits."""
+        tm = CssNormaliseProcessor._build_target_map({"line_height": "1.5"})
+        assert tm["line-height"] == "1.5"
+
+    def test_text_align_not_length_based(self) -> None:
+        tm = CssNormaliseProcessor._build_target_map({"text_align": "center"})
+        assert tm["text-align"] == "center"
+
+    def test_zero_no_unit(self) -> None:
+        tm = CssNormaliseProcessor._build_target_map({"line_height": "0"})
+        assert tm["line-height"] == "0"

@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 from boozarr.processors.base import BaseProcessor, Fix, Issue
+from boozarr.utils import normalize_css_value
 
 _PARAGRAPH_PROPS = ["font-size", "line-height", "text-align"]
 
@@ -131,9 +132,10 @@ class CssNormaliseProcessor(BaseProcessor):
         target_map: dict[str, str] = {}
         font_val = config.get("font_size")
         if font_val is not None:
-            target_map["font-size"] = font_val
+            target_map["font-size"] = normalize_css_value(font_val)
         line_val = config.get("line_height")
         if line_val is not None:
+            # line-height can be unitless (e.g., 1.5), so don't force px
             target_map["line-height"] = line_val
         text_val = config.get("text_align")
         if text_val is not None:
@@ -188,4 +190,9 @@ def _parse_css_text(css_text: str, props: dict[str, str]) -> None:
             prop_name = prop_match.group(1).strip().lower()
             prop_value = prop_match.group(2).strip()
             if prop_name in _PARAGRAPH_PROPS:
-                props[prop_name] = prop_value
+                # font-size is length-based and needs unit normalization;
+                # line-height and text-align can be unitless/keyword values.
+                if prop_name == "font-size":
+                    props[prop_name] = normalize_css_value(prop_value)
+                else:
+                    props[prop_name] = prop_value
