@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 from boozarr.processors.base import BaseProcessor, Fix, Issue
 from boozarr.utils import normalize_css_value
 
-_PARAGRAPH_PROPS = ["font-size", "line-height", "text-align"]
+_PARAGRAPH_PROPS = ["font-size", "line-height", "text-align", "text-indent"]
 
 _CSS_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
 _CSS_RULESET_RE = re.compile(r"([^{]+)\{([^}]*)\}")
@@ -76,9 +76,7 @@ class CssNormaliseProcessor(BaseProcessor):
             except Exception:
                 continue
             new_content = content
-            for style_match in re.finditer(
-                r"(<style[^>]*>)(.*?)(</style>)", content, re.IGNORECASE | re.DOTALL
-            ):
+            for style_match in re.finditer(r"(<style[^>]*>)(.*?)(</style>)", content, re.IGNORECASE | re.DOTALL):
                 old_style = style_match.group(0)
                 css_text = style_match.group(2)
                 new_css = CssNormaliseProcessor._rewrite_css_text(css_text, target_map)
@@ -166,6 +164,9 @@ class CssNormaliseProcessor(BaseProcessor):
         text_val = config.get("text_align")
         if text_val is not None:
             target_map["text-align"] = text_val
+        indent_val = config.get("text_indent")
+        if indent_val is not None:
+            target_map["text-indent"] = normalize_css_value(indent_val)
         return target_map
 
     def fix(self, epub: Any, issues: list[Issue], config: dict[str, Any]) -> list[Fix]:

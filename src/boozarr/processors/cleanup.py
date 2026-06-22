@@ -9,8 +9,12 @@ from boozarr.processors.base import BaseProcessor, Fix, Issue
 
 # Matches empty block/inline elements: <p></p>, <div></div>, <span></span>
 # with optional whitespace-only content between the tags.
-_EMPTY_ELEMENT_RE = re.compile(
-    r"<(p|div|span)\b[^>]*>\s*</\1>", re.IGNORECASE
+_EMPTY_ELEMENT_RE = re.compile(r"<(p|div|span)\b[^>]*>\s*</\1>", re.IGNORECASE)
+
+# Matches leading non-breaking spaces (and regular spaces) after a <p> opening
+# tag — this is a common pre-CSS technique for paragraph indentation.
+_LEADING_NBSP_RE = re.compile(
+    r"(<p\b[^>]*>)(?:&nbsp;|&#160;|\xa0|\s)+", re.IGNORECASE
 )
 
 
@@ -34,14 +38,20 @@ class CleanupProcessor(BaseProcessor):
             except Exception:
                 continue
             count = len(_EMPTY_ELEMENT_RE.findall(content))
-            if count:
-                total += count
+            nbsp = len(_LEADING_NBSP_RE.findall(content))
+            if count or nbsp:
+                total += count + nbsp
+                parts = []
+                if count:
+                    parts.append(f"{count} empty element(s)")
+                if nbsp:
+                    parts.append(f"{nbsp} leading nbsp(s)")
                 issues.append(
                     Issue(
                         processor=self.name,
                         severity="info",
                         location=f"xhtml: {xhtml_file.name}",
-                        description=f"Found {count} empty element(s)",
+                        description=f"Found {' and '.join(parts)}",
                         fix_possible=True,
                     )
                 )
@@ -72,15 +82,27 @@ class CleanupProcessor(BaseProcessor):
             except Exception:
                 continue
             new_content = _EMPTY_ELEMENT_RE.sub("", content)
+            nbsp_count = len(_LEADING_NBSP_RE.findall(content))
+            if nbsp_count:
+                new_content = _LEADING_NBSP_RE.sub(r"\1", new_content)
             if new_content != content:
                 xhtml_file.write_text(new_content, encoding="utf-8")
                 count = len(_EMPTY_ELEMENT_RE.findall(content))
+                nbsp_count = len(_LEADING_NBSP_RE.findall(content))
+                parts = []
+                old_parts = []
+                if count:
+                    parts.append(f"{count} empty element(s)")
+                    old_parts.append(f"{count} empty tags")
+                if nbsp_count:
+                    parts.append(f"{nbsp_count} leading nbsp(s)")
+                    old_parts.append(f"{nbsp_count} leading nbsp")
                 fixes.append(
                     Fix(
                         processor=self.name,
                         location=f"xhtml: {xhtml_file.name}",
-                        description=f"Stripped {count} empty element(s)",
-                        old_value=f"{count} empty tags",
+                        description=f"Stripped {'; '.join(parts)}",
+                        old_value=", ".join(old_parts),
                         new_value="removed",
                     )
                 )

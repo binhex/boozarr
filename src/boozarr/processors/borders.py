@@ -99,9 +99,7 @@ class BordersProcessor(BaseProcessor):
             except Exception:
                 continue
             new_content = content
-            for style_match in re.finditer(
-                r"(<style[^>]*>)(.*?)(</style>)", content, re.IGNORECASE | re.DOTALL
-            ):
+            for style_match in re.finditer(r"(<style[^>]*>)(.*?)(</style>)", content, re.IGNORECASE | re.DOTALL):
                 old_style = style_match.group(0)
                 css_text = style_match.group(2)
                 new_css = BordersProcessor._rewrite_css_text(css_text, target_map)

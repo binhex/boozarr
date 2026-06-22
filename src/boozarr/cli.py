@@ -79,11 +79,11 @@ def _collect_processors() -> list[Any]:
     help="Logging level.",
 )
 @click.option(
-    "--normalise", is_flag=True, help="Apply all CSS defaults (--margin --padding --font-size --line-height --border --text-align)."
+    "--normalise",
+    is_flag=True,
+    help="Apply all CSS defaults (--margin --padding --font-size --line-height --border --text-align --text-indent).",
 )
-@click.option(
-    "--cleanup", is_flag=True, help="Remove empty <p>, <div>, <span> elements from XHTML."
-)
+@click.option("--cleanup", is_flag=True, help="Remove empty <p>, <div>, <span> elements from XHTML.")
 @click.option(
     "--text-align",
     type=click.Choice(["left", "center", "right", "justify"], case_sensitive=False),
@@ -93,11 +93,60 @@ def _collect_processors() -> list[Any]:
     metavar="<left|center|right|justify>",
     help="Target text-align (no value = left).",
 )
-@click.option("--border", type=int, default=None, is_flag=False, flag_value=0, metavar="<int>", help="Target border, px (no value = 0).")
-@click.option("--margin", type=int, default=None, is_flag=False, flag_value=2, metavar="<int>", help="Target margin, px (no value = 2).")
-@click.option("--padding", type=int, default=None, is_flag=False, flag_value=2, metavar="<int>", help="Target padding, px (no value = 2).")
-@click.option("--font-size", type=int, default=None, is_flag=False, flag_value=12, metavar="<int>", help="Target font size, px (no value = 12).")
-@click.option("--line-height", type=float, default=None, is_flag=False, flag_value=1.2, metavar="<float>", help="Target line height (no value = 1.2).")
+@click.option(
+    "--border",
+    type=int,
+    default=None,
+    is_flag=False,
+    flag_value=0,
+    metavar="<int>",
+    help="Target border, px (no value = 0).",
+)
+@click.option(
+    "--margin",
+    type=int,
+    default=None,
+    is_flag=False,
+    flag_value=2,
+    metavar="<int>",
+    help="Target margin, px (no value = 2).",
+)
+@click.option(
+    "--padding",
+    type=int,
+    default=None,
+    is_flag=False,
+    flag_value=2,
+    metavar="<int>",
+    help="Target padding, px (no value = 2).",
+)
+@click.option(
+    "--font-size",
+    type=int,
+    default=None,
+    is_flag=False,
+    flag_value=12,
+    metavar="<int>",
+    help="Target font size, px (no value = 12).",
+)
+@click.option(
+    "--line-height",
+    type=float,
+    default=None,
+    is_flag=False,
+    flag_value=1.2,
+    metavar="<float>",
+    help="Target line height (no value = 1.2).",
+)
+@click.option(
+    "--text-indent",
+    type=int,
+    default=None,
+    is_flag=False,
+    flag_value=0,
+    metavar="<int>",
+    help="Target text indent, px (no value = 0).",
+)
 @click.option("--check-external-links", is_flag=True, help="Validate external URLs.")
 @click.option("--compress", type=int, default=None, metavar="<int>", help="Apply EPUB recompression (0=store, 9=best).")
 @click.version_option(version=_VERSION, prog_name="boozarr")
@@ -113,6 +162,7 @@ def cli(
     padding: int | None,
     font_size: int | None,
     line_height: float | None,
+    text_indent: int | None,
     text_align: str | None,
     check_external_links: bool,
     compress: int | None,
@@ -135,26 +185,20 @@ def cli(
     processors = _collect_processors()
 
     if normalise:
-        defaults = {
-            "border": 0,
-            "margin": 2,
-            "padding": 2,
-            "font_size": 12,
-            "line_height": 1.2,
-            "text_align": "left",
-        }
         if border is None:
-            border = defaults["border"]
+            border = 0
         if margin is None:
-            margin = defaults["margin"]
+            margin = 2
         if padding is None:
-            padding = defaults["padding"]
+            padding = 2
         if font_size is None:
-            font_size = defaults["font_size"]
+            font_size = 12
         if line_height is None:
-            line_height = defaults["line_height"]
+            line_height = 1.2
         if text_align is None:
-            text_align = defaults["text_align"]
+            text_align = "left"
+        if text_indent is None:
+            text_indent = 0
 
     config = {
         "border": border,
@@ -163,6 +207,7 @@ def cli(
         "font_size": font_size,
         "line_height": line_height,
         "text_align": text_align,
+        "text_indent": text_indent,
         "check_external_links": check_external_links,
         "compress": compress,
         "cleanup": cleanup,
