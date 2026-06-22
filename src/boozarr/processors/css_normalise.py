@@ -135,8 +135,8 @@ class CssNormaliseProcessor(BaseProcessor):
             target_map["font-size"] = normalize_css_value(font_val)
         line_val = config.get("line_height")
         if line_val is not None:
-            # line-height can be unitless (e.g., 1.5), so don't force px
-            target_map["line-height"] = line_val
+            # line-height can be unitless (e.g., 1.5), store as string for comparison
+            target_map["line-height"] = str(line_val)
         text_val = config.get("text_align")
         if text_val is not None:
             target_map["text-align"] = text_val

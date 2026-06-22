@@ -19,7 +19,7 @@ def normalize_css_value(value: str | int | float) -> str:
     unchanged.
     """
     if isinstance(value, (int, float)):
-        return value if value == 0 else f"{value}px"
+        return str(value) if value == 0 else f"{value}px"
     if _BARE_INT_RE.match(value) and value.lstrip("-") != "0":
         return value + "px"
     return value

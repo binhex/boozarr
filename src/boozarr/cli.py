@@ -80,14 +80,15 @@ def _collect_processors() -> list[Any]:
     "--text-align",
     type=click.Choice(["left", "center", "right", "justify"], case_sensitive=False),
     default=None,
-    metavar="<string>",
-    help="Target text-align (left, center, right, justify).",
+    flag_value="left",
+    metavar="<left|center|right|justify>",
+    help="Target text-align (no value = left).",
 )
-@click.option("--border", default=None, metavar="<string>", help="Target border (e.g., '1px', 'none').")
-@click.option("--margin", type=int, default=None, metavar="<int>", help="Target margin (px appended).")
-@click.option("--padding", type=int, default=None, metavar="<int>", help="Target padding (px appended).")
-@click.option("--font-size", type=int, default=None, metavar="<int>", help="Target font size (px appended).")
-@click.option("--line-height", type=float, default=None, metavar="<float>", help="Target line height.")
+@click.option("--border", type=int, default=None, flag_value=0, metavar="<int>", help="Target border, px (no value = 0).")
+@click.option("--margin", type=int, default=None, flag_value=2, metavar="<int>", help="Target margin, px (no value = 2).")
+@click.option("--padding", type=int, default=None, flag_value=2, metavar="<int>", help="Target padding, px (no value = 2).")
+@click.option("--font-size", type=int, default=None, flag_value=12, metavar="<int>", help="Target font size, px (no value = 12).")
+@click.option("--line-height", type=float, default=None, flag_value=1.2, metavar="<float>", help="Target line height (no value = 1.2).")
 @click.option("--check-external-links", is_flag=True, help="Validate external URLs.")
 @click.option("--compress", type=int, default=None, metavar="<int>", help="Apply EPUB recompression (0=store, 9=best).")
 @click.version_option(version=_VERSION, prog_name="boozarr")
@@ -98,7 +99,7 @@ def cli(
     db_path: str,
     log_path: str,
     log_level: str,
-    border: str | None,
+    border: int | None,
     margin: int | None,
     padding: int | None,
     font_size: int | None,
