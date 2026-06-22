@@ -76,14 +76,20 @@ def _collect_processors() -> list[Any]:
     metavar="<level>",
     help="Logging level.",
 )
-@click.option("--text-align", default=None, metavar="<val>", help="Target text-align.")
-@click.option("--border", default=None, metavar="<val>", help="Target border.")
-@click.option("--margin", default=None, metavar="<val>", help="Target margin.")
-@click.option("--padding", default=None, metavar="<val>", help="Target padding.")
-@click.option("--font-size", default=None, metavar="<val>", help="Target font size.")
-@click.option("--line-height", default=None, metavar="<val>", help="Target line height.")
+@click.option(
+    "--text-align",
+    type=click.Choice(["left", "center", "right", "justify"], case_sensitive=False),
+    default=None,
+    metavar="<string>",
+    help="Target text-align (left, center, right, justify).",
+)
+@click.option("--border", default=None, metavar="<string>", help="Target border (e.g., '1px', 'none').")
+@click.option("--margin", type=int, default=None, metavar="<int>", help="Target margin (px appended).")
+@click.option("--padding", type=int, default=None, metavar="<int>", help="Target padding (px appended).")
+@click.option("--font-size", type=int, default=None, metavar="<int>", help="Target font size (px appended).")
+@click.option("--line-height", type=float, default=None, metavar="<float>", help="Target line height.")
 @click.option("--check-external-links", is_flag=True, help="Validate external URLs.")
-@click.option("--compress", type=int, default=None, metavar="<0-9>", help="Apply EPUB recompression (0=store, 9=best).")
+@click.option("--compress", type=int, default=None, metavar="<int>", help="Apply EPUB recompression (0=store, 9=best).")
 @click.version_option(version=_VERSION, prog_name="boozarr")
 def cli(
     library_path: str,
@@ -93,10 +99,10 @@ def cli(
     log_path: str,
     log_level: str,
     border: str | None,
-    margin: str | None,
-    padding: str | None,
-    font_size: str | None,
-    line_height: str | None,
+    margin: int | None,
+    padding: int | None,
+    font_size: int | None,
+    line_height: float | None,
     text_align: str | None,
     check_external_links: bool,
     compress: int | None,

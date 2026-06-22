@@ -69,7 +69,7 @@ boozarr --library-path /path/to/epub/library --border 1px --margin 0 --padding 0
 | `--font-size` | — | Target base font size (only applied when specified) |
 | `--line-height` | — | Target line height (only applied when specified) |
 | `--paragraph-spacing` | — | Target paragraph spacing (only applied when specified) |
-| `--text-align` | — | Target text-align value (only applied when specified) |
+| `--text-align` | — | Target text-align (left, center, right, justify — only when specified) |
 | `--check-external-links` | off | Validate external URLs via HEAD requests |
 | `--compress` | — | Apply EPUB recompression level (0=store, 9=best, only when specified) |
 
