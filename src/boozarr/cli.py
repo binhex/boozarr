@@ -14,6 +14,7 @@ from boozarr.logger import create_logger
 from boozarr.pipeline import Pipeline
 from boozarr.processors.borders import BordersProcessor
 from boozarr.processors.chapters import ChaptersProcessor
+from boozarr.processors.cleanup import CleanupProcessor
 from boozarr.processors.compression import CompressionProcessor
 from boozarr.processors.css_normalise import CssNormaliseProcessor
 from boozarr.processors.links import LinksProcessor
@@ -35,6 +36,7 @@ def _collect_processors() -> list[Any]:
     """Build the list of all processors. Each processor self-regulates via its config."""
     return [
         ChaptersProcessor(),
+        CleanupProcessor(),
         BordersProcessor(),
         MetadataProcessor(),
         CssNormaliseProcessor(),
@@ -77,18 +79,25 @@ def _collect_processors() -> list[Any]:
     help="Logging level.",
 )
 @click.option(
+    "--normalise", is_flag=True, help="Apply all CSS defaults (--margin --padding --font-size --line-height --border --text-align)."
+)
+@click.option(
+    "--cleanup", is_flag=True, help="Remove empty <p>, <div>, <span> elements from XHTML."
+)
+@click.option(
     "--text-align",
     type=click.Choice(["left", "center", "right", "justify"], case_sensitive=False),
     default=None,
+    is_flag=False,
     flag_value="left",
     metavar="<left|center|right|justify>",
     help="Target text-align (no value = left).",
 )
-@click.option("--border", type=int, default=None, flag_value=0, metavar="<int>", help="Target border, px (no value = 0).")
-@click.option("--margin", type=int, default=None, flag_value=2, metavar="<int>", help="Target margin, px (no value = 2).")
-@click.option("--padding", type=int, default=None, flag_value=2, metavar="<int>", help="Target padding, px (no value = 2).")
-@click.option("--font-size", type=int, default=None, flag_value=12, metavar="<int>", help="Target font size, px (no value = 12).")
-@click.option("--line-height", type=float, default=None, flag_value=1.2, metavar="<float>", help="Target line height (no value = 1.2).")
+@click.option("--border", type=int, default=None, is_flag=False, flag_value=0, metavar="<int>", help="Target border, px (no value = 0).")
+@click.option("--margin", type=int, default=None, is_flag=False, flag_value=2, metavar="<int>", help="Target margin, px (no value = 2).")
+@click.option("--padding", type=int, default=None, is_flag=False, flag_value=2, metavar="<int>", help="Target padding, px (no value = 2).")
+@click.option("--font-size", type=int, default=None, is_flag=False, flag_value=12, metavar="<int>", help="Target font size, px (no value = 12).")
+@click.option("--line-height", type=float, default=None, is_flag=False, flag_value=1.2, metavar="<float>", help="Target line height (no value = 1.2).")
 @click.option("--check-external-links", is_flag=True, help="Validate external URLs.")
 @click.option("--compress", type=int, default=None, metavar="<int>", help="Apply EPUB recompression (0=store, 9=best).")
 @click.version_option(version=_VERSION, prog_name="boozarr")
@@ -107,6 +116,8 @@ def cli(
     text_align: str | None,
     check_external_links: bool,
     compress: int | None,
+    normalise: bool,
+    cleanup: bool,
 ) -> None:
     """Boozarr - Automated EPUB Editor.
 
@@ -123,6 +134,28 @@ def cli(
 
     processors = _collect_processors()
 
+    if normalise:
+        defaults = {
+            "border": 0,
+            "margin": 2,
+            "padding": 2,
+            "font_size": 12,
+            "line_height": 1.2,
+            "text_align": "left",
+        }
+        if border is None:
+            border = defaults["border"]
+        if margin is None:
+            margin = defaults["margin"]
+        if padding is None:
+            padding = defaults["padding"]
+        if font_size is None:
+            font_size = defaults["font_size"]
+        if line_height is None:
+            line_height = defaults["line_height"]
+        if text_align is None:
+            text_align = defaults["text_align"]
+
     config = {
         "border": border,
         "margin": margin,
@@ -132,6 +165,7 @@ def cli(
         "text_align": text_align,
         "check_external_links": check_external_links,
         "compress": compress,
+        "cleanup": cleanup,
     }
 
     pipeline = Pipeline(db=db, processors=processors, config=config, fix=fix, backup=not no_backup)

@@ -62,6 +62,34 @@ class CssNormaliseProcessor(BaseProcessor):
             content = file_path.read_text(encoding="utf-8")
         except Exception:
             return
+        new_content = CssNormaliseProcessor._rewrite_css_text(content, target_map)
+        if new_content != content:
+            file_path.write_text(new_content, encoding="utf-8")
+
+    @staticmethod
+    def _rewrite_inline_styles(extract_dir: Path, target_map: dict[str, str]) -> None:
+        for xhtml_file in extract_dir.rglob("*.xhtml"):
+            if not xhtml_file.is_file():
+                continue
+            try:
+                content = xhtml_file.read_text(encoding="utf-8")
+            except Exception:
+                continue
+            new_content = content
+            for style_match in re.finditer(
+                r"(<style[^>]*>)(.*?)(</style>)", content, re.IGNORECASE | re.DOTALL
+            ):
+                old_style = style_match.group(0)
+                css_text = style_match.group(2)
+                new_css = CssNormaliseProcessor._rewrite_css_text(css_text, target_map)
+                if new_css != css_text:
+                    new_style = style_match.group(1) + new_css + style_match.group(3)
+                    new_content = new_content.replace(old_style, new_style, 1)
+            if new_content != content:
+                xhtml_file.write_text(new_content, encoding="utf-8")
+
+    @staticmethod
+    def _rewrite_css_text(css_text: str, target_map: dict[str, str]) -> str:
 
         def replace_props(match: re.Match) -> str:
             selector = match.group(1)
@@ -91,9 +119,7 @@ class CssNormaliseProcessor(BaseProcessor):
             new_body = "".join(segments)
             return f"{selector}{{{new_body}}}"
 
-        new_content = _CSS_RULESET_RE.sub(replace_props, content)
-        if new_content != content:
-            file_path.write_text(new_content, encoding="utf-8")
+        return _CSS_RULESET_RE.sub(replace_props, css_text)
 
     def check(self, epub: Any, config: dict[str, Any] | None = None) -> list[Issue]:
         """Scan CSS files and report non-standard values for configured properties only.
@@ -157,9 +183,11 @@ class CssNormaliseProcessor(BaseProcessor):
         if extract_dir is None:
             return []
         target_map = self._build_target_map(config)
+        # Apply fixes to all CSS files and inline <style> blocks
         for css_file in extract_dir.rglob("*.css"):
             if css_file.is_file():
                 self._rewrite_css_file(css_file, target_map)
+        self._rewrite_inline_styles(extract_dir, target_map)
         return [
             Fix(
                 processor=self.name,

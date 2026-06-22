@@ -257,6 +257,8 @@ class TestBordersTargetMap:
         assert tm["margin"] == "50px"
         assert tm["margin-left"] == "50px"
         assert tm["margin-right"] == "50px"
+        assert tm["margin-top"] == "50px"
+        assert tm["margin-bottom"] == "50px"
 
     def test_number_with_unit_passes_through(self) -> None:
         tm = BordersProcessor._build_target_map({"margin": "2em"})
@@ -280,4 +282,8 @@ class TestBordersTargetMap:
         tm = BordersProcessor._build_target_map({"border": "5", "margin": "10", "padding": "20"})
         assert tm["border"] == "5px"
         assert tm["margin"] == "10px"
+        assert tm["margin-left"] == "10px"
+        assert tm["margin-right"] == "10px"
+        assert tm["margin-top"] == "10px"
+        assert tm["margin-bottom"] == "10px"
         assert tm["padding"] == "20px"
