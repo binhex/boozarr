@@ -20,7 +20,7 @@ class TestReport:
     def test_log_line_warn(self) -> None:
         r = Report()
         line = r.log_line("/path/book.epub", "warn", issues=2, fixes=0)
-        assert "INFO" in line
+        assert "MODIFY" in line
 
     def test_log_line_error(self) -> None:
         r = Report()

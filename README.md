@@ -90,7 +90,7 @@ For each EPUB file in the library:
 2. Each enabled processor runs `check()` against the extracted EPUB, reporting issues.
 3. If `--fix` is set, enabled processors apply their fixes.
 4. The modified EPUB is re-packed with compression.
-5. A result is logged per-file: `[OK]`, `[INFO]`, `[ERR]`, or `[SKIP]`.
+5. A result is logged per-file: `[OK]`, `[MODIFY]`, `[ERR]`, or `[SKIP]`.
 
 Unchanged files are skipped on re-run (tracked by SHA-256 hash and CLI config hash in SQLite).
 

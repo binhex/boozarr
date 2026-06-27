@@ -55,6 +55,18 @@ class TestChaptersCheck:
         assert len(issues) == 1
         assert issues[0].processor == "chapters"
 
+    def test_issue_when_ncx_xml_unparseable(self) -> None:
+        """check() returns 1 issue when NCX content is not valid XML."""
+        epub = MagicMock()
+        epub.read_file.side_effect = lambda p: {
+            "toc.ncx": "not valid xml <<<",
+            "content.opf": "<package/>",
+        }[p]
+        epub.get_opf_path.return_value = "content.opf"
+        issues = ChaptersProcessor().check(epub)
+        assert len(issues) == 1
+        assert issues[0].processor == "chapters"
+
 
 class TestChaptersFix:
     def test_fix_returns_empty_when_not_extracted(self) -> None:
@@ -178,6 +190,41 @@ class TestChaptersProcessorIntegration:
         issues_after = processor.check(wrapper2)
         assert len(issues_after) == 0, f"Expected 0 issues after fix, got {len(issues_after)}"
 
+    def test_check_finds_ncx_in_subdirectory(self, tmp_path: Path) -> None:
+        """check() should resolve NCX href relative to the OPF directory.
+
+        When the OPF lives in OEBPS/ and the NCX href is "toc.ncx", the
+        actual NCX path is OEBPS/toc.ncx, not toc.ncx at the EPUB root.
+        """
+        epub_path = tmp_path / "book.epub"
+        with zipfile.ZipFile(epub_path, "w") as zf:
+            zf.writestr(
+                "META-INF/container.xml",
+                '<?xml version="1.0"?><container version="1.0" '
+                'xmlns="urn:oasis:names:tc:opendocument:xmlns:container">'
+                '<rootfiles><rootfile full-path="OEBPS/content.opf" '
+                'media-type="application/oebps-package+xml"/></rootfiles></container>',
+            )
+            zf.writestr(
+                "OEBPS/content.opf",
+                '<?xml version="1.0"?><package>'
+                "<manifest>"
+                '<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>'
+                "</manifest></package>",
+            )
+            zf.writestr(
+                "OEBPS/toc.ncx",
+                '<?xml version="1.0"?>'
+                '<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/">'
+                '<navMap><navPoint id="c1" playOrder="1">'
+                "<navLabel><text>Ch1</text></navLabel>"
+                '<content src="ch1.xhtml"/>'
+                "</navPoint></navMap></ncx>",
+            )
+        wrapper = EpubWrapper(epub_path)
+        issues = ChaptersProcessor().check(wrapper)
+        assert len(issues) == 0, f"NCX in OEBPS/ with navPoints should report 0 issues, got {len(issues)}"
+
     def test_check_returns_one_when_ncx_is_empty(self, tmp_path: Path) -> None:
         """An EPUB with an empty NCX (no navPoints) should report 1 issue."""
         epub_path = tmp_path / "book.epub"
@@ -197,3 +244,72 @@ class TestChaptersProcessorIntegration:
         wrapper = EpubWrapper(epub_path)
         issues = ChaptersProcessor().check(wrapper)
         assert len(issues) == 1
+
+    def test_fix_writes_to_existing_ncx(self, tmp_path: Path) -> None:
+        """fix() discovers the existing NCX via rglob and writes to it."""
+        epub_path = tmp_path / "book.epub"
+        with zipfile.ZipFile(epub_path, "w") as zf:
+            zf.writestr(
+                "META-INF/container.xml",
+                '<?xml version="1.0"?><container version="1.0" '
+                'xmlns="urn:oasis:names:tc:opendocument:xmlns:container">'
+                '<rootfiles><rootfile full-path="OEBPS/content.opf" '
+                'media-type="application/oebps-package+xml"/></rootfiles></container>',
+            )
+            zf.writestr(
+                "OEBPS/content.opf",
+                '<?xml version="1.0"?><package>'
+                "<manifest>"
+                '<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>'
+                "</manifest></package>",
+            )
+            zf.writestr(
+                "OEBPS/toc.ncx",
+                '<?xml version="1.0"?><ncx xmlns="http://www.daisy.org/z3986/2005/ncx/"><navMap></navMap></ncx>',
+            )
+            zf.writestr("OEBPS/ch1.xhtml", "<html><body><h1>Chapter 1</h1></body></html>")
+
+        wrapper = EpubWrapper(epub_path)
+        extract_dir = tmp_path / "extracted"
+        wrapper.extract(extract_dir)
+
+        processor = ChaptersProcessor()
+        issues = processor.check(wrapper)
+        assert len(issues) == 1
+
+        fixes = processor.fix(wrapper, issues, {})
+        assert len(fixes) == 1
+        # Fix should reference the existing NCX path, not the default "toc.ncx"
+        assert "OEBPS/toc.ncx" in fixes[0].location
+
+    def test_ncx_found_by_extension_not_mediatype(self, tmp_path: Path) -> None:
+        """_search_opf_for_ncx finds NCX by .ncx extension when media-type
+        doesn't contain 'ncx' or 'dtbncx'."""
+        epub_path = tmp_path / "book.epub"
+        with zipfile.ZipFile(epub_path, "w") as zf:
+            zf.writestr(
+                "META-INF/container.xml",
+                '<?xml version="1.0"?><container version="1.0" '
+                'xmlns="urn:oasis:names:tc:opendocument:xmlns:container">'
+                '<rootfiles><rootfile full-path="content.opf" '
+                'media-type="application/oebps-package+xml"/></rootfiles></container>',
+            )
+            zf.writestr(
+                "content.opf",
+                '<?xml version="1.0"?><package>'
+                "<manifest>"
+                '<item id="ncx" href="toc.ncx" media-type="text/xml"/>'
+                "</manifest></package>",
+            )
+            zf.writestr(
+                "toc.ncx",
+                '<?xml version="1.0"?>'
+                '<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/">'
+                '<navMap><navPoint id="c1" playOrder="1">'
+                "<navLabel><text>Ch1</text></navLabel>"
+                '<content src="ch1.xhtml"/>'
+                "</navPoint></navMap></ncx>",
+            )
+        wrapper = EpubWrapper(epub_path)
+        issues = ChaptersProcessor().check(wrapper)
+        assert len(issues) == 0, f"NCX found by .ncx extension should report 0 issues, got {len(issues)}"

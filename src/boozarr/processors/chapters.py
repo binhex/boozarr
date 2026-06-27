@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import os
 import re
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
 from xml.etree import ElementTree
 from xml.sax.saxutils import escape
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 from boozarr.processors.base import BaseProcessor, Fix, Issue
 
@@ -42,18 +40,28 @@ class ChaptersProcessor(BaseProcessor):
 
     @staticmethod
     def _search_opf_for_ncx(epub: Any, opf_path: str) -> str | None:
-        """Read the OPF manifest and return the NCX href, or None."""
+        """Read the OPF manifest and return the resolved NCX path, or None.
+
+        The NCX href in the OPF manifest is relative to the OPF file's
+        directory.  This method resolves it to a path relative to the EPUB
+        root so the caller can read the file without further path mangling.
+        """
         opf_content = epub.read_file(opf_path)
         root = ElementTree.fromstring(opf_content)
+        opf_dir = str(Path(opf_path).parent)
         for item in root.iter():
             if not (item.tag.endswith("}item") or item.tag == "item"):
                 continue
             mt = item.get("media-type", "")
+            href: str | None = None
             if "dtbncx" in mt or "ncx" in mt:
-                return item.get("href")
-            href = item.get("href", "")
-            if href.endswith(".ncx"):
-                return href
+                href = item.get("href")
+            else:
+                candidate = item.get("href", "")
+                if candidate.endswith(".ncx"):
+                    href = candidate
+            if href is not None:
+                return str(Path(opf_dir) / href) if opf_dir != "." else href
         return None
 
     def check(self, epub: Any, config: dict[str, Any] | None = None) -> list[Issue]:
