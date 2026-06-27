@@ -11,11 +11,10 @@ from boozarr.processors.base import BaseProcessor, Fix, Issue
 # with optional whitespace-only content between the tags.
 _EMPTY_ELEMENT_RE = re.compile(r"<(p|div|span)\b[^>]*>\s*</\1>", re.IGNORECASE)
 
-# Matches leading non-breaking spaces (and regular spaces) after a <p> opening
-# tag — this is a common pre-CSS technique for paragraph indentation.
-_LEADING_NBSP_RE = re.compile(
-    r"(<p\b[^>]*>)(?:&nbsp;|&#160;|\xa0|\s)+", re.IGNORECASE
-)
+# Matches leading non-breaking spaces (and regular spaces) after a <p>,
+# <div>, or <span> opening tag — a common pre-CSS technique for paragraph
+# indentation.
+_LEADING_NBSP_RE = re.compile(r"(<(?:p|div|span)\b[^>]*>)(?:&nbsp;|&#160;|\xa0|\s)+", re.IGNORECASE)
 
 
 class CleanupProcessor(BaseProcessor):
@@ -81,10 +80,13 @@ class CleanupProcessor(BaseProcessor):
                 content = xhtml_file.read_text(encoding="utf-8")
             except Exception:
                 continue
-            new_content = _EMPTY_ELEMENT_RE.sub("", content)
-            nbsp_count = len(_LEADING_NBSP_RE.findall(content))
-            if nbsp_count:
+            new_content = content
+            while True:
+                prev = new_content
                 new_content = _LEADING_NBSP_RE.sub(r"\1", new_content)
+                new_content = _EMPTY_ELEMENT_RE.sub("", new_content)
+                if new_content == prev:
+                    break
             if new_content != content:
                 xhtml_file.write_text(new_content, encoding="utf-8")
                 count = len(_EMPTY_ELEMENT_RE.findall(content))

@@ -125,9 +125,9 @@ def _collect_processors() -> list[Any]:
     type=int,
     default=None,
     is_flag=False,
-    flag_value=12,
+    flag_value=14,
     metavar="<int>",
-    help="Target font size, px (no value = 12).",
+    help="Target font size, px (no value = 14).",
 )
 @click.option(
     "--line-height",
@@ -192,7 +192,7 @@ def cli(
         if padding is None:
             padding = 2
         if font_size is None:
-            font_size = 12
+            font_size = 14
         if line_height is None:
             line_height = 1.2
         if text_align is None:
