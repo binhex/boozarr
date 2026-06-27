@@ -287,3 +287,69 @@ class TestBordersTargetMap:
         assert tm["margin-top"] == "10px"
         assert tm["margin-bottom"] == "10px"
         assert tm["padding"] == "20px"
+
+    # ── Per-side margin/padding override tests ──────────────────────────
+
+    def test_per_side_margin_override(self) -> None:
+        """When margin and margin_top are both specified, margin_top
+        overrides the margin-top value."""
+        tm = BordersProcessor._build_target_map({"margin": "10", "margin_top": "5"})
+        assert tm["margin"] == "10px"
+        assert tm["margin-left"] == "10px"
+        assert tm["margin-right"] == "10px"
+        assert tm["margin-top"] == "5px"  # overridden by per-side value
+        assert tm["margin-bottom"] == "10px"
+
+    def test_per_side_padding_override(self) -> None:
+        """When padding and padding_left are both specified, padding_left
+        overrides the padding-left value."""
+        tm = BordersProcessor._build_target_map({"padding": "10", "padding_left": "5"})
+        assert tm["padding"] == "10px"
+        assert tm["padding-left"] == "5px"  # overridden
+        assert tm["padding-right"] == "10px"
+        assert tm["padding-top"] == "10px"  # from shorthand
+        assert tm["padding-bottom"] == "10px"  # from shorthand
+
+    def test_per_side_margin_alone(self) -> None:
+        """When only margin_top is set (no base margin), only margin-top
+        appears in the target map."""
+        tm = BordersProcessor._build_target_map({"margin_top": "5"})
+        assert tm == {"margin-top": "5px"}
+
+    def test_per_side_padding_alone(self) -> None:
+        """When only padding_bottom is set (no base padding), only
+        padding-bottom appears in the target map."""
+        tm = BordersProcessor._build_target_map({"padding_bottom": "8"})
+        assert tm == {"padding-bottom": "8px"}
+
+    def test_per_side_multiple(self) -> None:
+        """Multiple per-side overrides can be set simultaneously without
+        a base margin or padding."""
+        tm = BordersProcessor._build_target_map(
+            {
+                "margin_top": "3",
+                "margin_bottom": "4",
+                "padding_left": "1",
+                "padding_right": "2",
+            }
+        )
+        assert tm == {
+            "margin-top": "3px",
+            "margin-bottom": "4px",
+            "padding-left": "1px",
+            "padding-right": "2px",
+        }
+
+    def test_per_side_none_skipped_with_base(self) -> None:
+        """When a per-side value is None and the base property is set, the
+        base value is preserved (not overridden)."""
+        tm = BordersProcessor._build_target_map({"margin": "10", "margin_top": None})
+        assert tm["margin"] == "10px"
+        assert tm["margin-top"] == "10px"  # falls back to base margin value
+        assert tm["margin-bottom"] == "10px"
+
+    def test_per_side_none_without_base(self) -> None:
+        """When a per-side value is None and base property is also None,
+        nothing is added to the target map."""
+        tm = BordersProcessor._build_target_map({"margin_top": None})
+        assert tm == {}

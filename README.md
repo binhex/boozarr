@@ -66,6 +66,14 @@ boozarr --library-path /path/to/epub/library --border 1px --margin 0 --padding 0
 | `--border` | — | Target border value (only applied when specified) |
 | `--margin` | — | Target margin value (only applied when specified) |
 | `--padding` | — | Target padding value (only applied when specified) |
+| `--margin-top` | — | Target margin-top, px (only applied when specified) |
+| `--margin-bottom` | — | Target margin-bottom, px (only applied when specified) |
+| `--margin-left` | — | Target margin-left, px (only applied when specified) |
+| `--margin-right` | — | Target margin-right, px (only applied when specified) |
+| `--padding-top` | — | Target padding-top, px (only applied when specified) |
+| `--padding-bottom` | — | Target padding-bottom, px (only applied when specified) |
+| `--padding-left` | — | Target padding-left, px (only applied when specified) |
+| `--padding-right` | — | Target padding-right, px (only applied when specified) |
 | `--font-size` | 14 | Target base font size (only applied when specified) |
 | `--line-height` | 1.2 | Target line height (only applied when specified) |
 | `--text-indent` | 0 | Target text indent, px (only applied when specified) |
@@ -82,7 +90,7 @@ For each EPUB file in the library:
 2. Each enabled processor runs `check()` against the extracted EPUB, reporting issues.
 3. If `--fix` is set, enabled processors apply their fixes.
 4. The modified EPUB is re-packed with compression.
-5. A result is logged per-file: `[OK]`, `[WARN]`, `[ERR]`, or `[SKIP]`.
+5. A result is logged per-file: `[OK]`, `[INFO]`, `[ERR]`, or `[SKIP]`.
 
 Unchanged files are skipped on re-run (tracked by SHA-256 hash and CLI config hash in SQLite).
 

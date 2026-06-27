@@ -15,12 +15,12 @@ class TestReport:
         r = Report()
         line = r.log_line("/path/book.epub", "ok", issues=0, fixes=3)
         assert "OK" in line
-        assert "book.epub" in line
+        assert "/path/book.epub" in line
 
     def test_log_line_warn(self) -> None:
         r = Report()
         line = r.log_line("/path/book.epub", "warn", issues=2, fixes=0)
-        assert "WARN" in line
+        assert "INFO" in line
 
     def test_log_line_error(self) -> None:
         r = Report()

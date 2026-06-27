@@ -81,7 +81,7 @@ def _collect_processors() -> list[Any]:
 @click.option(
     "--normalise",
     is_flag=True,
-    help="Apply all CSS defaults (--margin --padding --font-size --line-height --border --text-align --text-indent).",
+    help="Apply all CSS defaults (--margin --padding --margin-{top,bottom,left,right} --padding-{top,bottom,left,right} --font-size --line-height --border --text-align --text-indent).",
 )
 @click.option("--cleanup", is_flag=True, help="Remove empty <p>, <div>, <span> elements from XHTML.")
 @click.option(
@@ -107,18 +107,90 @@ def _collect_processors() -> list[Any]:
     type=int,
     default=None,
     is_flag=False,
-    flag_value=2,
+    flag_value=0,
     metavar="<int>",
-    help="Target margin, px (no value = 2).",
+    help="Target margin, px (no value = 0).",
 )
 @click.option(
     "--padding",
     type=int,
     default=None,
     is_flag=False,
-    flag_value=2,
+    flag_value=0,
     metavar="<int>",
-    help="Target padding, px (no value = 2).",
+    help="Target padding, px (no value = 0).",
+)
+@click.option(
+    "--margin-top",
+    type=int,
+    default=None,
+    is_flag=False,
+    flag_value=0,
+    metavar="<int>",
+    help="Target margin-top, px (no value = 0).",
+)
+@click.option(
+    "--margin-bottom",
+    type=int,
+    default=None,
+    is_flag=False,
+    flag_value=0,
+    metavar="<int>",
+    help="Target margin-bottom, px (no value = 0).",
+)
+@click.option(
+    "--margin-left",
+    type=int,
+    default=None,
+    is_flag=False,
+    flag_value=0,
+    metavar="<int>",
+    help="Target margin-left, px (no value = 0).",
+)
+@click.option(
+    "--margin-right",
+    type=int,
+    default=None,
+    is_flag=False,
+    flag_value=0,
+    metavar="<int>",
+    help="Target margin-right, px (no value = 0).",
+)
+@click.option(
+    "--padding-top",
+    type=int,
+    default=None,
+    is_flag=False,
+    flag_value=0,
+    metavar="<int>",
+    help="Target padding-top, px (no value = 0).",
+)
+@click.option(
+    "--padding-bottom",
+    type=int,
+    default=None,
+    is_flag=False,
+    flag_value=0,
+    metavar="<int>",
+    help="Target padding-bottom, px (no value = 0).",
+)
+@click.option(
+    "--padding-left",
+    type=int,
+    default=None,
+    is_flag=False,
+    flag_value=0,
+    metavar="<int>",
+    help="Target padding-left, px (no value = 0).",
+)
+@click.option(
+    "--padding-right",
+    type=int,
+    default=None,
+    is_flag=False,
+    flag_value=0,
+    metavar="<int>",
+    help="Target padding-right, px (no value = 0).",
 )
 @click.option(
     "--font-size",
@@ -164,6 +236,14 @@ def cli(
     line_height: float | None,
     text_indent: int | None,
     text_align: str | None,
+    margin_top: int | None,
+    margin_bottom: int | None,
+    margin_left: int | None,
+    margin_right: int | None,
+    padding_top: int | None,
+    padding_bottom: int | None,
+    padding_left: int | None,
+    padding_right: int | None,
     check_external_links: bool,
     compress: int | None,
     normalise: bool,
@@ -188,9 +268,9 @@ def cli(
         if border is None:
             border = 0
         if margin is None:
-            margin = 2
+            margin = 0
         if padding is None:
-            padding = 2
+            padding = 0
         if font_size is None:
             font_size = 14
         if line_height is None:
@@ -199,11 +279,35 @@ def cli(
             text_align = "left"
         if text_indent is None:
             text_indent = 0
+        if margin_top is None:
+            margin_top = 0
+        if margin_bottom is None:
+            margin_bottom = 0
+        if margin_left is None:
+            margin_left = 0
+        if margin_right is None:
+            margin_right = 0
+        if padding_top is None:
+            padding_top = 0
+        if padding_bottom is None:
+            padding_bottom = 0
+        if padding_left is None:
+            padding_left = 0
+        if padding_right is None:
+            padding_right = 0
 
     config = {
         "border": border,
         "margin": margin,
         "padding": padding,
+        "margin_top": margin_top,
+        "margin_bottom": margin_bottom,
+        "margin_left": margin_left,
+        "margin_right": margin_right,
+        "padding_top": padding_top,
+        "padding_bottom": padding_bottom,
+        "padding_left": padding_left,
+        "padding_right": padding_right,
         "font_size": font_size,
         "line_height": line_height,
         "text_align": text_align,

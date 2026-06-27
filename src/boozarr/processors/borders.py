@@ -17,6 +17,8 @@ _TARGET = [
     "margin-top",
     "margin-bottom",
     "padding",
+    "padding-top",
+    "padding-bottom",
     "margin-left",
     "margin-right",
     "padding-left",
@@ -192,8 +194,33 @@ class BordersProcessor(BaseProcessor):
         padding_val = config.get("padding")
         if padding_val is not None:
             target_map["padding"] = normalize_css_value(padding_val)
+            target_map["padding-top"] = normalize_css_value(padding_val)
+            target_map["padding-bottom"] = normalize_css_value(padding_val)
             target_map["padding-left"] = normalize_css_value(padding_val)
             target_map["padding-right"] = normalize_css_value(padding_val)
+
+        # Per-side margin overrides
+        for key, prop in [
+            ("margin_top", "margin-top"),
+            ("margin_bottom", "margin-bottom"),
+            ("margin_left", "margin-left"),
+            ("margin_right", "margin-right"),
+        ]:
+            val = config.get(key)
+            if val is not None:
+                target_map[prop] = normalize_css_value(val)
+
+        # Per-side padding overrides
+        for key, prop in [
+            ("padding_top", "padding-top"),
+            ("padding_bottom", "padding-bottom"),
+            ("padding_left", "padding-left"),
+            ("padding_right", "padding-right"),
+        ]:
+            val = config.get(key)
+            if val is not None:
+                target_map[prop] = normalize_css_value(val)
+
         return target_map
 
     def fix(self, epub: Any, issues: list[Issue], config: dict[str, Any]) -> list[Fix]:
