@@ -141,3 +141,16 @@ class TestReport:
         assert len(result["fix_details"]) > 0, f"Dry-run should have fix_details, got {result['fix_details']}"
         assert "border" in result["fix_details"][0].lower()
         assert result["dry_run"] is True
+
+    def test_log_line_unknown_status(self) -> None:
+        r = Report()
+        line = r.log_line("/path/a.epub", "bogus", issues=1, fixes=0)
+        assert "?BOGUS?" in line
+        assert r.errors == 1
+
+    def test_fix_detail_without_colon(self) -> None:
+        """Fix detail without ':' should be grouped under 'unknown'."""
+        r = Report()
+        r.log_line("a.epub", "warn", issues=1, fixes=1, fix_details=["no_colon_here"])
+        s = r.final_summary(duration_s=1.0)
+        assert "unknown" in s

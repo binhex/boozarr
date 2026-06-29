@@ -92,7 +92,7 @@ class MetadataProcessor(BaseProcessor):
                 elem = ElementTree.SubElement(meta, tag)
                 elem.text = value
 
-        tree.write(opf_path, xml_declaration=True, encoding="UTF-8")
+        tree.write(opf_path, xml_declaration=True, encoding="utf-8")
         return True
 
     @staticmethod

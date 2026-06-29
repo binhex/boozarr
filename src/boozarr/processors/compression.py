@@ -19,14 +19,20 @@ class CompressionProcessor(BaseProcessor):
         # when there are no extraneous files.
         epub._compress_level = config.get("compress")
         issues: list[Issue] = []
-        extra = [f for f in getattr(epub, "extra_files", []) if f.name in _EXTRA]
-        if extra:
+        # Scan the extract directory for extraneous files at archive root
+        extract_dir = getattr(epub, "_extract_dir", None)
+        extra_names: list[str] = []
+        if extract_dir is not None:
+            for f in extract_dir.iterdir():
+                if f.is_file() and f.name.lower() in {e.lower() for e in _EXTRA}:
+                    extra_names.append(f.name)
+        if extra_names:
             issues.append(
                 Issue(
                     processor=self.name,
                     severity="info",
                     location="archive root",
-                    description=f"Found {len(extra)} extraneous file(s): {[e.name for e in extra]}",
+                    description=f"Found {len(extra_names)} extraneous file(s): {extra_names}",
                     fix_possible=True,
                 )
             )

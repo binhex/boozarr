@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from boozarr.processors.base import STATUS_ERROR, STATUS_OK, STATUS_SKIP, STATUS_WARN
+
 
 @dataclass
 class Report:
@@ -12,7 +14,6 @@ class Report:
     errors: int = 0
     total_issues: int = 0
     total_fixes: int = 0
-    _lines: list[str] = field(default_factory=list, repr=False)
     _fix_details_list: list[str] = field(default_factory=list, repr=False)
 
     def log_line(
@@ -32,14 +33,14 @@ class Report:
         self.total_issues += issues
         self.total_fixes += fixes
         filename = file_path
-        if status == "ok":
+        if status == STATUS_OK:
             tag = "[OK]"
-        elif status == "warn":
+        elif status == STATUS_WARN:
             tag = "[MODIFY]"
-        elif status == "error":
+        elif status == STATUS_ERROR:
             tag = "[ERR]"
             self.errors += 1
-        elif status == "skip":
+        elif status == STATUS_SKIP:
             tag = "[SKIP]"
             self.skipped += 1
         else:
@@ -50,7 +51,6 @@ class Report:
         if fix_details:
             line += "\n" + "\n".join(f"         - {d}" for d in fix_details)
             self._fix_details_list.extend(fix_details)
-        self._lines.append(line)
         return line
 
     def final_summary(self, duration_s: float) -> str:

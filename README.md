@@ -79,7 +79,9 @@ boozarr --library-path /path/to/epub/library --border 1px --margin 0 --padding 0
 | `--text-indent` | 0 | Target text indent, px (only applied when specified) |
 | `--paragraph-spacing` | — | Target paragraph spacing (only applied when specified) |
 | `--text-align` | left | Target text-align (left, center, right, justify) |
-| `--check-external-links` | off | Validate external URLs via HEAD requests |
+| `--check-external-links` | off | Report external URLs (no validation in batch mode) |
+| `--normalise` | off | Apply all CSS defaults in one flag (margin, padding, font, etc.) |
+| `--cleanup` | off | Remove empty `<p>`, `<div>`, `<span>` elements from XHTML |
 | `--compress` | — | Apply EPUB recompression level (0=store, 9=best, only when specified) |
 
 ## How it works

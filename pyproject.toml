@@ -23,9 +23,6 @@ classifiers = [
 dependencies = [
     "click",
     "loguru",
-    "ebooklib",
-    "lxml",
-    "tinycss2",
 ]
 
 [project.scripts]

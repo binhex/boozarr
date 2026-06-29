@@ -356,3 +356,38 @@ class TestCompressionIntegration:
         assert result["status"] != "error", f"Pipeline failed: {result}"
         # Without compress config, no issues detected
         assert result["issues"] == 0
+
+
+class TestFormatFixDetail:
+    def test_equal_old_new_uses_double_equal(self) -> None:
+        """When old_value == new_value, the arrow should be ' == ' not ' → '."""
+        from boozarr.processors.base import Fix
+
+        mock_proc = MagicMock()
+        mock_proc.name = "borders"
+        fix = Fix(
+            processor="borders",
+            location="CSS (padding-left)",
+            description="Normalised CSS (padding-left)",
+            old_value="1px",
+            new_value="1px",
+        )
+        result = Pipeline._format_fix_detail(mock_proc, fix)
+        assert " == " in result, f"Expected ' == ' in '{result}'"
+        assert " → " not in result
+
+    def test_different_values_uses_arrow(self) -> None:
+        """When old_value != new_value, the arrow should be ' → '."""
+        from boozarr.processors.base import Fix
+
+        mock_proc = MagicMock()
+        mock_proc.name = "borders"
+        fix = Fix(
+            processor="borders",
+            location="CSS (margin)",
+            description="Normalised CSS (margin)",
+            old_value="10px",
+            new_value="0",
+        )
+        result = Pipeline._format_fix_detail(mock_proc, fix)
+        assert " → " in result, f"Expected ' → ' in '{result}'"

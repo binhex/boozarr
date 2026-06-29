@@ -6,6 +6,12 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
 
+# Processing status constants used by Pipeline and Report
+STATUS_OK = "ok"
+STATUS_WARN = "warn"
+STATUS_ERROR = "error"
+STATUS_SKIP = "skip"
+
 
 @dataclass
 class Issue:

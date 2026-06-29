@@ -45,6 +45,89 @@ def _collect_processors() -> list[Any]:
     ]
 
 
+def _apply_normalise_defaults(
+    border: int | None,
+    margin: int | None,
+    padding: int | None,
+    font_size: int | None,
+    line_height: float | None,
+    text_align: str | None,
+    text_indent: int | None,
+    margin_top: int | None,
+    margin_bottom: int | None,
+    margin_left: int | None,
+    margin_right: int | None,
+    padding_top: int | None,
+    padding_bottom: int | None,
+    padding_left: int | None,
+    padding_right: int | None,
+) -> tuple[
+    int | None,
+    int | None,
+    int | None,
+    int | None,
+    float | None,
+    str | None,
+    int | None,
+    int | None,
+    int | None,
+    int | None,
+    int | None,
+    int | None,
+    int | None,
+    int | None,
+    int | None,
+]:
+    """Apply default values for all CSS options when --normalise is set."""
+    if border is None:
+        border = 0
+    if margin is None:
+        margin = 0
+    if padding is None:
+        padding = 0
+    if font_size is None:
+        font_size = 14
+    if line_height is None:
+        line_height = 1.2
+    if text_align is None:
+        text_align = "left"
+    if text_indent is None:
+        text_indent = 0
+    if margin_top is None:
+        margin_top = 0
+    if margin_bottom is None:
+        margin_bottom = 0
+    if margin_left is None:
+        margin_left = 0
+    if margin_right is None:
+        margin_right = 0
+    if padding_top is None:
+        padding_top = 0
+    if padding_bottom is None:
+        padding_bottom = 0
+    if padding_left is None:
+        padding_left = 0
+    if padding_right is None:
+        padding_right = 0
+    return (
+        border,
+        margin,
+        padding,
+        font_size,
+        line_height,
+        text_align,
+        text_indent,
+        margin_top,
+        margin_bottom,
+        margin_left,
+        margin_right,
+        padding_top,
+        padding_bottom,
+        padding_left,
+        padding_right,
+    )
+
+
 @click.command(context_settings={"show_default": True})
 @click.option(
     "--library-path",
@@ -265,36 +348,39 @@ def cli(
     processors = _collect_processors()
 
     if normalise:
-        if border is None:
-            border = 0
-        if margin is None:
-            margin = 0
-        if padding is None:
-            padding = 0
-        if font_size is None:
-            font_size = 14
-        if line_height is None:
-            line_height = 1.2
-        if text_align is None:
-            text_align = "left"
-        if text_indent is None:
-            text_indent = 0
-        if margin_top is None:
-            margin_top = 0
-        if margin_bottom is None:
-            margin_bottom = 0
-        if margin_left is None:
-            margin_left = 0
-        if margin_right is None:
-            margin_right = 0
-        if padding_top is None:
-            padding_top = 0
-        if padding_bottom is None:
-            padding_bottom = 0
-        if padding_left is None:
-            padding_left = 0
-        if padding_right is None:
-            padding_right = 0
+        (
+            border,
+            margin,
+            padding,
+            font_size,
+            line_height,
+            text_align,
+            text_indent,
+            margin_top,
+            margin_bottom,
+            margin_left,
+            margin_right,
+            padding_top,
+            padding_bottom,
+            padding_left,
+            padding_right,
+        ) = _apply_normalise_defaults(
+            border,
+            margin,
+            padding,
+            font_size,
+            line_height,
+            text_align,
+            text_indent,
+            margin_top,
+            margin_bottom,
+            margin_left,
+            margin_right,
+            padding_top,
+            padding_bottom,
+            padding_left,
+            padding_right,
+        )
 
     config = {
         "border": border,

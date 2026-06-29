@@ -65,3 +65,31 @@ class TestCliBasic:
         result = runner.invoke(cli, ["--help"])
         assert result.exit_code == 0
         assert "--compress" in result.output
+
+    def test_normalise_flag_sets_defaults(self, tmp_path: Path) -> None:
+        """--normalise should set all CSS defaults without errors."""
+        import zipfile
+
+        lib = tmp_path / "lib"
+        lib.mkdir()
+        epub_path = lib / "book.epub"
+        with zipfile.ZipFile(epub_path, "w") as zf:
+            zf.writestr("META-INF/container.xml", "<container/>")
+            zf.writestr("OEBPS/content.opf", "<package/>")
+            zf.writestr("OEBPS/ch1.xhtml", "<p>Text</p>")
+
+        db_path = tmp_path / "test.db"
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "--library-path",
+                str(lib),
+                "--normalise",
+                "--db-path",
+                str(db_path),
+                "--log-path",
+                str(tmp_path / "test.log"),
+            ],
+        )
+        assert result.exit_code == 0, result.output

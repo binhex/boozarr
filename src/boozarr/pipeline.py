@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from boozarr.epub import EpubWrapper
+from boozarr.processors.base import STATUS_ERROR, STATUS_OK, STATUS_SKIP, STATUS_WARN
 
 
 class Pipeline:
@@ -40,13 +41,14 @@ class Pipeline:
         try:
             existing = self.db.lookup(file_hash, self.config_hash)
         except AttributeError:
+            # Fallback for test mocks that don't have the new lookup method
             existing = self.db.lookup_hash(file_hash)
-        return bool(existing in ("ok", "warn"))
+        return bool(existing in (STATUS_OK, STATUS_WARN))
 
     def _make_error(self, epub_path: Path, exc: Exception) -> dict[str, Any]:
         return {
             "file_path": str(epub_path),
-            "status": "error",
+            "status": STATUS_ERROR,
             "issues": 0,
             "fixes": 0,
             "error": str(exc),
@@ -67,12 +69,12 @@ class Pipeline:
         The returned dictionary includes a ``dry_run`` key that is True when
         ``self.fix`` is False.
         """
-        if overall == "error":
-            status = "error"
+        if overall == STATUS_ERROR:
+            status = STATUS_ERROR
         elif total_issues == 0:
-            status = "ok"
+            status = STATUS_OK
         else:
-            status = "warn"
+            status = STATUS_WARN
         self.db.record_file(
             str(epub_path),
             wrapper.file_hash,
@@ -106,7 +108,7 @@ class Pipeline:
         if self._should_skip(wrapper.file_hash):
             return {
                 "file_path": str(epub_path),
-                "status": "skip",
+                "status": STATUS_SKIP,
                 "issues": 0,
                 "fixes": 0,
                 "fix_details": [],
@@ -147,7 +149,7 @@ class Pipeline:
         """
         total_issues = 0
         total_fixes = 0
-        overall = "ok"
+        overall = STATUS_OK
         fix_details: list[str] = []
         for proc in self.processors:
             try:
@@ -165,7 +167,7 @@ class Pipeline:
                             fix_details.append(self._format_fix_detail(proc, fix))
             except Exception:
                 self.db.log_event(str(epub_path), proc.name, "error", traceback.format_exc())
-                overall = "error"
+                overall = STATUS_ERROR
         return total_issues, total_fixes, overall, fix_details
 
     @staticmethod

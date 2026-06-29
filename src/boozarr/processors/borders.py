@@ -33,6 +33,23 @@ _CSS_PROPERTY_RE = re.compile(r"([\w-]+)\s*:\s*(.+?)\s*(?:;|$)")
 _OLD_VALUE_RE = re.compile(r"'([^']+)'")
 
 
+def _set_shorthand(target_map: dict[str, str], config: dict[str, Any], key: str, props: list[str]) -> None:
+    """Expand a shorthand property (e.g. margin) into individual CSS properties."""
+    val = config.get(key)
+    if val is not None:
+        normalized = normalize_css_value(val)
+        for prop in props:
+            target_map[prop] = normalized
+
+
+def _set_overrides(target_map: dict[str, str], config: dict[str, Any], overrides: list[tuple[str, str]]) -> None:
+    """Apply per-side overrides for a property group."""
+    for config_key, css_prop in overrides:
+        val = config.get(config_key)
+        if val is not None:
+            target_map[css_prop] = normalize_css_value(val)
+
+
 class BordersProcessor(BaseProcessor):
     name = "borders"
 
@@ -181,46 +198,52 @@ class BordersProcessor(BaseProcessor):
     def _build_target_map(config: dict[str, Any]) -> dict[str, str]:
         """Build a target map of CSS properties to rewrite, skipping None config values."""
         target_map: dict[str, str] = {}
-        border_val = config.get("border")
-        if border_val is not None:
-            target_map["border"] = normalize_css_value(border_val)
-        margin_val = config.get("margin")
-        if margin_val is not None:
-            target_map["margin"] = normalize_css_value(margin_val)
-            target_map["margin-left"] = normalize_css_value(margin_val)
-            target_map["margin-right"] = normalize_css_value(margin_val)
-            target_map["margin-top"] = normalize_css_value(margin_val)
-            target_map["margin-bottom"] = normalize_css_value(margin_val)
-        padding_val = config.get("padding")
-        if padding_val is not None:
-            target_map["padding"] = normalize_css_value(padding_val)
-            target_map["padding-top"] = normalize_css_value(padding_val)
-            target_map["padding-bottom"] = normalize_css_value(padding_val)
-            target_map["padding-left"] = normalize_css_value(padding_val)
-            target_map["padding-right"] = normalize_css_value(padding_val)
-
-        # Per-side margin overrides
-        for key, prop in [
-            ("margin_top", "margin-top"),
-            ("margin_bottom", "margin-bottom"),
-            ("margin_left", "margin-left"),
-            ("margin_right", "margin-right"),
-        ]:
-            val = config.get(key)
-            if val is not None:
-                target_map[prop] = normalize_css_value(val)
-
-        # Per-side padding overrides
-        for key, prop in [
-            ("padding_top", "padding-top"),
-            ("padding_bottom", "padding-bottom"),
-            ("padding_left", "padding-left"),
-            ("padding_right", "padding-right"),
-        ]:
-            val = config.get(key)
-            if val is not None:
-                target_map[prop] = normalize_css_value(val)
-
+        _set_shorthand(target_map, config, "border", ["border"])
+        _set_shorthand(
+            target_map,
+            config,
+            "margin",
+            [
+                "margin",
+                "margin-left",
+                "margin-right",
+                "margin-top",
+                "margin-bottom",
+            ],
+        )
+        _set_shorthand(
+            target_map,
+            config,
+            "padding",
+            [
+                "padding",
+                "padding-top",
+                "padding-bottom",
+                "padding-left",
+                "padding-right",
+            ],
+        )
+        # Per-side overrides
+        _set_overrides(
+            target_map,
+            config,
+            [
+                ("margin_top", "margin-top"),
+                ("margin_bottom", "margin-bottom"),
+                ("margin_left", "margin-left"),
+                ("margin_right", "margin-right"),
+            ],
+        )
+        _set_overrides(
+            target_map,
+            config,
+            [
+                ("padding_top", "padding-top"),
+                ("padding_bottom", "padding-bottom"),
+                ("padding_left", "padding-left"),
+                ("padding_right", "padding-right"),
+            ],
+        )
         return target_map
 
     def fix(self, epub: Any, issues: list[Issue], config: dict[str, Any]) -> list[Fix]:
