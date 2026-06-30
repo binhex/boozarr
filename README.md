@@ -27,6 +27,23 @@ uv venv --quiet
 uv sync
 ```
 
+### Shell completion (recommended)
+
+Enable tab completion for all boozarr options:
+
+```bash
+# Bash — add to ~/.bashrc:
+eval "$(_BOOZARR_COMPLETE=bash_source boozarr)"
+
+# Zsh — add to ~/.zshrc:
+eval "$(_BOOZARR_COMPLETE=zsh_source boozarr)"
+
+# Fish — add to ~/.config/fish/completions/boozarr.fish:
+_BOOZARR_COMPLETE=fish_source boozarr | source
+```
+
+Once enabled, `boozarr --lib` + **Tab** → `boozarr --library-path`, `boozarr --mar` + **Tab** cycles through `--margin`, `--margin-top`, etc.
+
 ## Usage
 
 Run in dry-run mode (check-only, no modifications):
