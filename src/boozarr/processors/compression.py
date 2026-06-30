@@ -19,13 +19,8 @@ class CompressionProcessor(BaseProcessor):
         # when there are no extraneous files.
         epub._compress_level = config.get("compress")
         issues: list[Issue] = []
-        # Scan the extract directory for extraneous files at archive root
         extract_dir = getattr(epub, "_extract_dir", None)
-        extra_names: list[str] = []
-        if extract_dir is not None:
-            for f in extract_dir.iterdir():
-                if f.is_file() and f.name.lower() in {e.lower() for e in _EXTRA}:
-                    extra_names.append(f.name)
+        extra_names = CompressionProcessor._find_extraneous(extract_dir)
         if extra_names:
             issues.append(
                 Issue(
@@ -48,6 +43,14 @@ class CompressionProcessor(BaseProcessor):
             )
         )
         return issues
+
+    @staticmethod
+    def _find_extraneous(extract_dir: Any) -> list[str]:
+        """Find extraneous files (DS_Store, thumbs.db) in the extract dir."""
+        if extract_dir is None:
+            return []
+        extra_lower = {e.lower() for e in _EXTRA}
+        return [f.name for f in extract_dir.iterdir() if f.is_file() and f.name.lower() in extra_lower]
 
     def fix(self, epub: Any, issues: list[Issue], config: dict[str, Any]) -> list[Fix]:
         epub._compress_level = config.get("compress")

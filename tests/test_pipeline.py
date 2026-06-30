@@ -391,3 +391,19 @@ class TestFormatFixDetail:
         )
         result = Pipeline._format_fix_detail(mock_proc, fix)
         assert " → " in result, f"Expected ' → ' in '{result}'"
+
+    def test_empty_old_new_uses_description_only(self) -> None:
+        """When old_value and new_value are both empty/falsy, just return description."""
+        from boozarr.processors.base import Fix
+
+        mock_proc = MagicMock()
+        mock_proc.name = "chapters"
+        fix = Fix(
+            processor="chapters",
+            location="toc.ncx",
+            description="Added 10 chapter entries to toc.ncx",
+            old_value="",
+            new_value="",
+        )
+        result = Pipeline._format_fix_detail(mock_proc, fix)
+        assert "chapters: Added 10 chapter entries to toc.ncx" in result

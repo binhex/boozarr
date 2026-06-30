@@ -203,3 +203,32 @@ class TestCssNormaliseTargetMap:
     def test_zero_no_unit(self) -> None:
         tm = CssNormaliseProcessor._build_target_map({"line_height": "0"})
         assert tm["line-height"] == "0"
+
+
+class TestRewriteInlineStyles:
+    def test_rewrites_inline_style_properties(self, tmp_path: Path) -> None:
+        extract_dir = tmp_path / "extracted"
+        extract_dir.mkdir()
+        xhtml = extract_dir / "page.xhtml"
+        xhtml.write_text(
+            "<html><head>"
+            "<style>p { font-size: 12pt; line-height: 1.2; text-align: center; }</style>"
+            "</head><body></body></html>"
+        )
+        target_map = {"font-size": "1em", "line-height": "1.5", "text-align": "left"}
+        CssNormaliseProcessor._rewrite_inline_styles(extract_dir, target_map)
+        result = xhtml.read_text()
+        assert "font-size: 1em" in result
+        assert "line-height: 1.5" in result
+        assert "text-align: left" in result
+
+    def test_preserves_non_target_properties(self, tmp_path: Path) -> None:
+        extract_dir = tmp_path / "extracted"
+        extract_dir.mkdir()
+        xhtml = extract_dir / "page.xhtml"
+        xhtml.write_text("<html><head><style>p { font-size: 12pt; color: blue; margin: 0; }</style></head></html>")
+        target_map = {"font-size": "1em"}
+        CssNormaliseProcessor._rewrite_inline_styles(extract_dir, target_map)
+        result = xhtml.read_text()
+        assert "color: blue" in result
+        assert "font-size: 1em" in result

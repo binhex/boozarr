@@ -45,6 +45,11 @@ def _collect_processors() -> list[Any]:
     ]
 
 
+def _or_default(value: Any, default: Any) -> Any:
+    """Return *value* if not None, otherwise *default*."""
+    return value if value is not None else default
+
+
 def _apply_normalise_defaults(
     border: int | None,
     margin: int | None,
@@ -79,36 +84,21 @@ def _apply_normalise_defaults(
     int | None,
 ]:
     """Apply default values for all CSS options when --normalise is set."""
-    if border is None:
-        border = 0
-    if margin is None:
-        margin = 0
-    if padding is None:
-        padding = 0
-    if font_size is None:
-        font_size = 14
-    if line_height is None:
-        line_height = 1.2
-    if text_align is None:
-        text_align = "left"
-    if text_indent is None:
-        text_indent = 0
-    if margin_top is None:
-        margin_top = 0
-    if margin_bottom is None:
-        margin_bottom = 0
-    if margin_left is None:
-        margin_left = 0
-    if margin_right is None:
-        margin_right = 0
-    if padding_top is None:
-        padding_top = 0
-    if padding_bottom is None:
-        padding_bottom = 0
-    if padding_left is None:
-        padding_left = 0
-    if padding_right is None:
-        padding_right = 0
+    border = _or_default(border, 0)
+    margin = _or_default(margin, 0)
+    padding = _or_default(padding, 0)
+    font_size = _or_default(font_size, 14)
+    line_height = _or_default(line_height, 1.2)
+    text_align = _or_default(text_align, "left")
+    text_indent = _or_default(text_indent, 0)
+    margin_top = _or_default(margin_top, 0)
+    margin_bottom = _or_default(margin_bottom, 0)
+    margin_left = _or_default(margin_left, 0)
+    margin_right = _or_default(margin_right, 0)
+    padding_top = _or_default(padding_top, 0)
+    padding_bottom = _or_default(padding_bottom, 0)
+    padding_left = _or_default(padding_left, 0)
+    padding_right = _or_default(padding_right, 0)
     return (
         border,
         margin,

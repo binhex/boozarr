@@ -866,4 +866,3 @@ git commit -m "feat: wire _discover_from_spine fallback into chapters fix()"
 ```
 
 ---
-
