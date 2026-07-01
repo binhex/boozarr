@@ -12,6 +12,16 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+class TestCompatCliIntegration:
+    def test_collect_processors_includes_compat(self) -> None:
+        from boozarr.cli import _collect_processors
+
+        procs = _collect_processors()
+        names = [p.name for p in procs]
+        assert "compat" in names, f"CompatProcessor missing from pipeline: {names}"
+        assert names.index("compat") == 0
+
+
 class TestCliBasic:
     def test_help_succeeds(self) -> None:
         runner = CliRunner()

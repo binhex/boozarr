@@ -12,6 +12,10 @@ Processes a library of EPUB files (500–5000+) running a configurable pipeline 
 - **CSS formatting normalisation** — Detects non-standard font-size, line-height, text-align, and margin values on paragraph-level elements.
 - **Broken link checker** — Verifies internal `href` targets exist within the EPUB. Optionally validates external URLs.
 - **Compression and cleanup** — Strips extraneous files (`.DS_Store`, `thumbs.db`) and re-packs with optimal compression.
+- **Cross-device compatibility** — strips embedded fonts (`.otf`, `.ttf`, `.woff`,
+  `.eot`, `.svg`), removes Apple Books display options, normalises OPF namespace
+  prefixes, and cleans up orphaned `@font-face` CSS rules. WOFF2 fonts are
+  preserved for EPUB3 readers.
 
 ## Prerequisites
 
@@ -97,7 +101,7 @@ boozarr --library-path /path/to/epub/library --border 1px --margin 0 --padding 0
 | `--paragraph-spacing` | — | Target paragraph spacing (only applied when specified) |
 | `--text-align` | left | Target text-align (left, center, right, justify) |
 | `--check-external-links` | off | Report external URLs (no validation in batch mode) |
-| `--normalise` | off | Apply all CSS defaults in one flag (margin, padding, font, etc.) |
+| `--normalise` | off | Apply CSS defaults + cross-device compat (strip fonts, normalise OPF) |
 | `--cleanup` | off | Remove empty `<p>`, `<div>`, `<span>` elements from XHTML |
 | `--compress` | — | Apply EPUB recompression level (0=store, 9=best, only when specified) |
 

@@ -15,6 +15,7 @@ from boozarr.pipeline import Pipeline
 from boozarr.processors.borders import BordersProcessor
 from boozarr.processors.chapters import ChaptersProcessor
 from boozarr.processors.cleanup import CleanupProcessor
+from boozarr.processors.compat import CompatProcessor
 from boozarr.processors.compression import CompressionProcessor
 from boozarr.processors.css_normalise import CssNormaliseProcessor
 from boozarr.processors.links import LinksProcessor
@@ -35,6 +36,7 @@ _DEFAULT_LOGS_PATH = f"{_PROJECT_ROOT}/logs/boozarr.log"
 def _collect_processors() -> list[Any]:
     """Build the list of all processors. Each processor self-regulates via its config."""
     return [
+        CompatProcessor(),
         ChaptersProcessor(),
         CleanupProcessor(),
         BordersProcessor(),
@@ -373,6 +375,7 @@ def cli(
         )
 
     config = {
+        "normalise": normalise,
         "border": border,
         "margin": margin,
         "padding": padding,

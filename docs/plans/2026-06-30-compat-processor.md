@@ -1034,4 +1034,3 @@ git commit -m "docs: update --normalise description with compatibility features"
 ```
 
 ---
-
