@@ -129,6 +129,23 @@ class TestCompatCheck:
         ns_issues = [i for i in issues if "namespace" in i.description.lower()]
         assert ns_issues == []
 
+    def test_check_bare_ns_opf_no_namespace_issue(self) -> None:
+        """OPF with default namespace (bare tags, no explicit prefix) should
+        NOT produce a namespace-prefixed issue."""
+        epub = MagicMock()
+        epub.get_opf_path.return_value = "content.opf"
+        opf = (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<package xmlns="http://www.idpf.org/2007/opf" version="2.0">'
+            "<manifest>"
+            '<item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/>'
+            "</manifest></package>"
+        )
+        epub.read_file.return_value = opf
+        issues = CompatProcessor().check(epub, {"normalise": True})
+        ns_issues = [i for i in issues if "namespace" in i.description.lower()]
+        assert ns_issues == [], f"Expected no namespace issues for bare OPF, got {ns_issues}"
+
 
 class TestCompatFix:
     """Test suite for CompatProcessor.fix()."""
@@ -233,6 +250,27 @@ class TestCompatNormaliseOpf:
         assert "<ns0:" not in result, f"Namespace prefixes remain: {result[:200]}"
         assert "<itemref" in result
         assert 'xmlns="http://www.idpf.org/2007/opf"' in result
+
+    def test_normalise_skips_bare_ns_opf(self, tmp_path: Path) -> None:
+        """Bare-namespace OPF (no explicit prefix) should NOT be rewritten."""
+        extract_dir = tmp_path / "extracted"
+        extract_dir.mkdir()
+        opf_path = extract_dir / "content.opf"
+        opf_path.write_text(
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<package xmlns="http://www.idpf.org/2007/opf" version="2.0">'
+            "<manifest>"
+            '<item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/>'
+            "</manifest></package>"
+        )
+
+        epub = MagicMock()
+        epub._extract_dir = extract_dir
+        epub.get_opf_path.return_value = "content.opf"
+
+        fixes = CompatProcessor().fix(epub, [], {"normalise": True})
+        ns_fixes = [f for f in fixes if "namespace" in f.description.lower()]
+        assert ns_fixes == [], f"Expected no namespace fixes for bare OPF, got {ns_fixes}"
 
     def test_normalised_opf_preserves_content(self, tmp_path: Path) -> None:
         extract_dir = tmp_path / "extracted"

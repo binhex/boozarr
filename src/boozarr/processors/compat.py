@@ -22,6 +22,7 @@ _FONT_MEDIA_TYPES: tuple[str, ...] = (
 
 _APPLE_DISPLAY_OPTIONS = "META-INF/com.apple.ibooks.display-options.xml"
 _FONT_FACE_RE = re.compile(r"@font-face\s*\{[^}]*\}", re.IGNORECASE)
+_OPF_PREFIX_PATTERN = re.compile(r"""xmlns:\w+\s*=\s*["']http://www\.idpf\.org/2007/opf["']""")
 
 
 class CompatProcessor(BaseProcessor):
@@ -41,7 +42,7 @@ class CompatProcessor(BaseProcessor):
 
         issues: list[Issue] = []
         self._scan_manifest_for_issues(root, issues)
-        self._check_namespace_prefixed_opf(root, issues)
+        self._check_namespace_prefixed_opf(issues, opf_content)
         return issues
 
     @staticmethod
@@ -53,22 +54,36 @@ class CompatProcessor(BaseProcessor):
                 CompatProcessor._scan_item(item, issues)
 
     @staticmethod
-    def _check_namespace_prefixed_opf(root: Any, issues: list[Issue]) -> None:
-        """Append an issue if the OPF uses namespace-prefixed tags."""
-        for elem in root.iter():
-            if "}" in elem.tag:
-                tag_uri, _, _ = elem.tag.partition("}")
-                if tag_uri.startswith("{") and tag_uri[1:] == "http://www.idpf.org/2007/opf":
-                    issues.append(
-                        Issue(
-                            processor="compat",
-                            severity="info",
-                            location="opf",
-                            description="OPF uses namespace-prefixed tags",
-                            fix_possible=True,
-                        )
-                    )
-                    break
+    def _has_explicit_opf_prefix(opf_content: str) -> bool:
+        """Return True if the raw OPF text contains an explicit namespace prefix
+        declaration for the OPF namespace (e.g. xmlns:ns0="...").
+
+        This distinguishes a genuinely prefixed OPF that needs normalisation from
+        an already-normalised OPF that uses a bare default xmlns="..." declaration.
+        ElementTree internally expands both forms to {ns}elementname tags, so the
+        check must look at the actual raw XML text.
+        """
+        return bool(_OPF_PREFIX_PATTERN.search(opf_content))
+
+    @staticmethod
+    def _check_namespace_prefixed_opf(issues: list[Issue], opf_content: str) -> None:
+        """Append an issue if the OPF uses namespace-prefixed tags.
+
+        Checks the raw OPF text for explicit namespace prefix declarations
+        (e.g. xmlns:ns0=\"...\") rather than relying on the parsed ElementTree,
+        which expands default namespace declarations into {ns}elementname tags
+        making both bare and prefixed OPFs look identical.
+        """
+        if CompatProcessor._has_explicit_opf_prefix(opf_content):
+            issues.append(
+                Issue(
+                    processor="compat",
+                    severity="info",
+                    location="opf",
+                    description="OPF uses namespace-prefixed tags",
+                    fix_possible=True,
+                )
+            )
 
     @staticmethod
     def _scan_item(item: Any, issues: list[Issue]) -> None:
@@ -221,6 +236,15 @@ class CompatProcessor(BaseProcessor):
         Returns True if the OPF was modified.
         """
         opf_file = extract_dir / opf_path
+        try:
+            opf_content = opf_file.read_text(encoding="utf-8")
+        except Exception:
+            return False
+
+        # Skip if OPF already uses bare tags (default namespace, no explicit prefix)
+        if not CompatProcessor._has_explicit_opf_prefix(opf_content):
+            return False
+
         try:
             tree = ElementTree.parse(str(opf_file))
         except Exception:
