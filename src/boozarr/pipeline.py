@@ -128,7 +128,10 @@ class Pipeline:
                 # Write to temp path then rename atomically to avoid data loss on crash
                 tmp_path = epub_path.with_suffix(".epub.tmp")
                 wrapper.repack(tmp_path)
-                tmp_path.replace(epub_path)
+                try:
+                    tmp_path.replace(epub_path)
+                except OSError as exc:
+                    return self._make_error(epub_path, exc)
                 # Recompute hash from the (now modified) file
                 wrapper.refresh_hash()
             # else: dry-run — don't repack, don't create backup

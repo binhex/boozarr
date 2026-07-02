@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import unittest.mock
 import zipfile
-from typing import TYPE_CHECKING
+from pathlib import Path
 from unittest.mock import MagicMock
 
 from boozarr.pipeline import Pipeline
 from boozarr.processors.borders import BordersProcessor
 from boozarr.processors.compression import CompressionProcessor
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _make_epub(path: Path) -> None:
@@ -296,6 +294,23 @@ class TestPipeline:
         result = pipeline.process_epub(epub_path)
 
         assert result["status"] == "error"
+
+    def test_catches_permission_error_during_fix_replace(self, tmp_path: Path) -> None:
+        """When os.replace() fails with PermissionError during repack, the pipeline
+        should return an error result instead of crashing the batch."""
+        epub_path = tmp_path / "input.epub"
+        _make_epub(epub_path)
+
+        db = MagicMock(spec_set=["lookup_hash", "record_file", "log_event"])
+        db.lookup_hash.return_value = None
+
+        pipeline = Pipeline(db=db, processors=[_ModifyingProcessor()], config={}, fix=True)
+
+        with unittest.mock.patch.object(Path, "replace", side_effect=PermissionError("Operation not permitted")):
+            result = pipeline.process_epub(epub_path)
+
+        assert result["status"] == "error", f"Expected error status, got {result}"
+        assert "Operation not permitted" in str(result.get("error", "")), f"Error mismatch: {result}"
 
 
 class TestCompressionIntegration:
