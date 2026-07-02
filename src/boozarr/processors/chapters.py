@@ -16,10 +16,12 @@ _CHAPTER_PATTERNS = [
     re.compile(r"Part\s+\d+", re.IGNORECASE),
     re.compile(r"Section\s+\d+", re.IGNORECASE),
     re.compile(r"CHAPTER\s+\w+", re.IGNORECASE),
+    re.compile(r"<h[1-6][^>]*>\s*(\d+|[IVXLCDM]+)\s*</h[1-6]>", re.IGNORECASE),
 ]
 _SKIP_FILENAME_SUBSTRINGS: tuple[str, ...] = (
     "cover",
     "title",
+    "titlepage",
     "toc",
     "nav",
     "copyright",
@@ -102,11 +104,25 @@ class ChaptersProcessor(BaseProcessor):
 
         try:
             root = ElementTree.fromstring(content)
-            if root.findall(f".//{{{_NCX_NS}}}navPoint"):
+            if self._has_real_chapters(root):
                 return []
         except Exception:
             pass
         return self._no_chapters_issue(ncx_path)
+
+    @staticmethod
+    def _has_real_chapters(ncx_root: Any) -> bool:
+        """Return True if the NCX has at least one navPoint not pointing to a
+        known non-content file (cover, title, toc, nav, copyright, about)."""
+        for np in ncx_root.findall(f".//{{{_NCX_NS}}}navPoint"):
+            content = np.find(f"{{{_NCX_NS}}}content")
+            if content is not None:
+                src: str | None = content.get("src")
+                if src:
+                    stem = Path(src).stem.lower()
+                    if not _should_skip_content_file(stem):
+                        return True
+        return False
 
     @staticmethod
     def _no_chapters_issue(location: str) -> list[Issue]:
@@ -240,7 +256,7 @@ class ChaptersProcessor(BaseProcessor):
 
     @staticmethod
     def _discover_chapters(extract_dir: Path, opf_path: str | None = None) -> list[tuple[str, str]]:
-        """Scan XHTML files for chapter patterns and h1/h2 fallback.
+        """Scan XHTML/HTML files for chapter patterns and h1/h2 fallback.
 
         Returns all matches across all pattern types, deduplicated by
         (file_path, byte_offset).  Sorted by spine order when opf_path
@@ -249,7 +265,7 @@ class ChaptersProcessor(BaseProcessor):
         discovered: list[tuple[str, str]] = []
         seen: set[tuple[str, int]] = set()
 
-        for xhtml_file in sorted(extract_dir.rglob("*.xhtml")):
+        for xhtml_file in sorted(list(extract_dir.rglob("*.html")) + list(extract_dir.rglob("*.xhtml"))):
             if xhtml_file.is_file():
                 ChaptersProcessor._scan_file_for_chapters(xhtml_file, extract_dir, discovered, seen)
 
@@ -276,7 +292,8 @@ class ChaptersProcessor(BaseProcessor):
             for match in pattern.finditer(content):
                 pos = match.start()
                 if (rel_path, pos) not in seen:
-                    discovered.append((rel_path, match.group(0)))
+                    label = match.group(1) if match.lastindex else match.group(0)
+                    discovered.append((rel_path, label))
                     seen.add((rel_path, pos))
                 matched = True
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import zipfile
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock
 
 if TYPE_CHECKING:
@@ -22,6 +22,52 @@ _SAMPLE_NCX = """<?xml version="1.0" encoding="UTF-8"?>
 </ncx>"""
 
 
+class TestHasRealChapters:
+    """Tests for _has_real_chapters static method."""
+
+    _NCX_NS = "http://www.daisy.org/z3986/2005/ncx/"
+    _NCX_TPL = """<?xml version="1.0" encoding="UTF-8"?>
+<ncx xmlns="{ns}" version="2005-1">
+  <head><meta name="dtb:uid" content="x"/></head>
+  <navMap>{navpoints}</navMap>
+</ncx>"""
+
+    def _make_root(self, navpoints_xml: str) -> Any:
+        from xml.etree import ElementTree
+
+        xml = self._NCX_TPL.format(ns=self._NCX_NS, navpoints=navpoints_xml)
+        return ElementTree.fromstring(xml)
+
+    def test_empty_ncx_returns_false(self) -> None:
+        root = self._make_root("")
+        assert ChaptersProcessor._has_real_chapters(root) is False
+
+    def test_placeholder_only_returns_false(self) -> None:
+        np = '<navPoint id="start" playOrder="1"><navLabel><text>Start</text></navLabel><content src="titlepage.xhtml"/></navPoint>'
+        root = self._make_root(np)
+        assert ChaptersProcessor._has_real_chapters(root) is False
+
+    def test_real_chapter_returns_true(self) -> None:
+        np = '<navPoint id="c1" playOrder="1"><navLabel><text>Ch1</text></navLabel><content src="chapter1.xhtml"/></navPoint>'
+        root = self._make_root(np)
+        assert ChaptersProcessor._has_real_chapters(root) is True
+
+    def test_placeholder_plus_real_returns_true(self) -> None:
+        nps = '<navPoint id="start" playOrder="1"><navLabel><text>Start</text></navLabel><content src="titlepage.xhtml"/></navPoint><navPoint id="c1" playOrder="2"><navLabel><text>Ch1</text></navLabel><content src="chapter1.xhtml"/></navPoint>'
+        root = self._make_root(nps)
+        assert ChaptersProcessor._has_real_chapters(root) is True
+
+    def test_navpoint_without_content_returns_false(self) -> None:
+        np = '<navPoint id="c1" playOrder="1"><navLabel><text>Ch1</text></navLabel></navPoint>'
+        root = self._make_root(np)
+        assert ChaptersProcessor._has_real_chapters(root) is False
+
+    def test_navpoint_without_src_returns_false(self) -> None:
+        np = '<navPoint id="c1" playOrder="1"><navLabel><text>Ch1</text></navLabel><content/></navPoint>'
+        root = self._make_root(np)
+        assert ChaptersProcessor._has_real_chapters(root) is False
+
+
 class TestChaptersCheck:
     def test_no_issues_when_toc_populated(self) -> None:
         epub = MagicMock()
@@ -29,6 +75,21 @@ class TestChaptersCheck:
         epub.get_opf_path.return_value = "content.opf"
         issues = ChaptersProcessor().check(epub)
         assert issues == []
+
+    def test_issue_when_ncx_has_only_placeholder_navpoint(self) -> None:
+        ncx_with_placeholder = """<?xml version="1.0" encoding="UTF-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <head><meta name="dtb:uid" content="x"/></head>
+  <navMap>
+    <navPoint id="start" playOrder="1"><navLabel><text>Start</text></navLabel><content src="titlepage.xhtml"/></navPoint>
+  </navMap>
+</ncx>"""
+        epub = MagicMock()
+        epub.read_file.side_effect = lambda p: {"toc.ncx": ncx_with_placeholder, "content.opf": "<package/>"}[p]
+        epub.get_opf_path.return_value = "content.opf"
+        issues = ChaptersProcessor().check(epub)
+        assert len(issues) == 1
+        assert issues[0].processor == "chapters"
 
     def test_issue_when_toc_empty(self) -> None:
         epub = MagicMock()
@@ -449,6 +510,73 @@ class TestDiscoverChaptersMultiMatch:
         assert "Chapter 1" in labels
         assert "Book Title" not in labels
 
+    def test_finds_chapters_in_html_files(self, tmp_path: Path) -> None:
+        extract_dir = tmp_path / "extracted"
+        extract_dir.mkdir()
+        html_file = extract_dir / "chapter.html"
+        html_file.write_text("<html><body><p>Chapter 1</p><p>Chapter 2</p></body></html>")
+        discovered = ChaptersProcessor._discover_chapters(extract_dir)
+        assert len(discovered) == 2
+        assert discovered[0][1] == "Chapter 1"
+        assert discovered[1][1] == "Chapter 2"
+
+    def test_detects_roman_numeral_in_h2(self, tmp_path: Path) -> None:
+        extract_dir = tmp_path / "extracted"
+        extract_dir.mkdir()
+        xhtml = extract_dir / "book.xhtml"
+        xhtml.write_text('<html><body><h2 class="calibre2" id="pb_0">IV</h2><p>Text.</p></body></html>')
+        discovered = ChaptersProcessor._discover_chapters(extract_dir)
+        assert len(discovered) == 1
+        assert discovered[0][1] == "IV"
+
+    def test_detects_number_in_h1(self, tmp_path: Path) -> None:
+        extract_dir = tmp_path / "extracted"
+        extract_dir.mkdir()
+        xhtml = extract_dir / "book.xhtml"
+        xhtml.write_text("<html><body><h1>3</h1><p>Text.</p></body></html>")
+        discovered = ChaptersProcessor._discover_chapters(extract_dir)
+        assert len(discovered) == 1
+        assert discovered[0][1] == "3"
+
+    def test_non_number_heading_uses_fallback(self, tmp_path: Path) -> None:
+        extract_dir = tmp_path / "extracted"
+        extract_dir.mkdir()
+        xhtml = extract_dir / "book.xhtml"
+        xhtml.write_text("<html><body><h2>Introduction</h2><p>Text.</p></body></html>")
+        discovered = ChaptersProcessor._discover_chapters(extract_dir)
+        assert len(discovered) == 1
+        # Should fall back to h1/h2 content extraction
+        assert discovered[0][1] == "Introduction"
+
+    def test_complex_heading_not_matched_by_number_pattern(self, tmp_path: Path) -> None:
+        extract_dir = tmp_path / "extracted"
+        extract_dir.mkdir()
+        xhtml = extract_dir / "book.xhtml"
+        xhtml.write_text("<html><body><h2>Henry VIII Edition</h2><p>Text.</p></body></html>")
+        discovered = ChaptersProcessor._discover_chapters(extract_dir)
+        assert len(discovered) == 1
+        assert discovered[0][1] == "Henry VIII Edition"
+
+    def test_heading_number_with_whitespace(self, tmp_path: Path) -> None:
+        extract_dir = tmp_path / "extracted"
+        extract_dir.mkdir()
+        xhtml = extract_dir / "book.xhtml"
+        xhtml.write_text("<html><body><h2> XIV </h2><p>Text.</p></body></html>")
+        discovered = ChaptersProcessor._discover_chapters(extract_dir)
+        assert len(discovered) == 1
+        assert discovered[0][1] == "XIV"
+
+    def test_scans_both_html_and_xhtml(self, tmp_path: Path) -> None:
+        extract_dir = tmp_path / "extracted"
+        extract_dir.mkdir()
+        (extract_dir / "part1.html").write_text("<html><body><p>Chapter 1</p></body></html>")
+        (extract_dir / "part2.xhtml").write_text("<html><body><p>Chapter 2</p></body></html>")
+        discovered = ChaptersProcessor._discover_chapters(extract_dir)
+        assert len(discovered) == 2
+        labels = [m[1] for m in discovered]
+        assert "Chapter 1" in labels
+        assert "Chapter 2" in labels
+
     def test_returns_empty_when_no_markers_and_no_headings(self, tmp_path: Path) -> None:
         extract_dir = tmp_path / "extracted"
         extract_dir.mkdir()
@@ -708,6 +836,83 @@ class TestChaptersProcessorIntegration:
         epub.read_file.return_value = opf
         result = ChaptersProcessor._search_opf_for_ncx(epub, "content.opf")
         assert result == "toc.ncx"
+
+    def test_end_to_end_placeholder_ncx_with_html_roman_headings(self, tmp_path: Path) -> None:
+        """Simulates the '1408' EPUB scenario:
+        - NCX has one placeholder navPoint (Start → titlepage)
+        - Content files use .html extension
+        - Chapters marked with <h2> Roman numerals (I, II, III)"""
+        epub_path = tmp_path / "book.epub"
+        with zipfile.ZipFile(epub_path, "w") as zf:
+            zf.writestr(
+                "META-INF/container.xml",
+                '<?xml version="1.0"?><container version="1.0" '
+                'xmlns="urn:oasis:names:tc:opendocument:xmlns:container">'
+                '<rootfiles><rootfile full-path="content.opf" '
+                'media-type="application/oebps-package+xml"/></rootfiles></container>',
+            )
+            zf.writestr(
+                "content.opf",
+                '<?xml version="1.0"?><package>'
+                "<manifest>"
+                '<item id="title" href="titlepage.xhtml" media-type="application/xhtml+xml"/>'
+                '<item id="ch1" href="index_split_001.html" media-type="application/xhtml+xml"/>'
+                '<item id="ch2" href="index_split_002.html" media-type="application/xhtml+xml"/>'
+                '<item id="ch3" href="index_split_003.html" media-type="application/xhtml+xml"/>'
+                '<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>'
+                "</manifest>"
+                "<spine>"
+                '<itemref idref="title"/>'
+                '<itemref idref="ch1"/>'
+                '<itemref idref="ch2"/>'
+                '<itemref idref="ch3"/>'
+                "</spine></package>",
+            )
+            zf.writestr(
+                "toc.ncx",
+                '<?xml version="1.0"?>'
+                '<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/">'
+                "<navMap>"
+                '<navPoint id="start" playOrder="1">'
+                "<navLabel><text>Start</text></navLabel>"
+                '<content src="titlepage.xhtml"/>'
+                "</navPoint>"
+                "</navMap></ncx>",
+            )
+            zf.writestr("titlepage.xhtml", "<html><body><p>Title</p></body></html>")
+            zf.writestr(
+                "index_split_001.html",
+                '<html><body><h2 class="calibre2">I</h2><p>Chapter one text.</p></body></html>',
+            )
+            zf.writestr(
+                "index_split_002.html",
+                '<html><body><h2 class="calibre2">II</h2><p>Chapter two text.</p></body></html>',
+            )
+            zf.writestr(
+                "index_split_003.html",
+                '<html><body><h2 class="calibre2">III</h2><p>Chapter three text.</p></body></html>',
+            )
+
+        wrapper = EpubWrapper(epub_path)
+        extract_dir = tmp_path / "extracted"
+        wrapper.extract(extract_dir)
+
+        processor = ChaptersProcessor()
+        issues = processor.check(wrapper)
+        assert len(issues) == 1
+        fixes = processor.fix(wrapper, issues, {})
+        assert len(fixes) == 1
+        wrapper.repack(epub_path)
+
+        wrapper2 = EpubWrapper(epub_path)
+        issues_after = processor.check(wrapper2)
+        assert len(issues_after) == 0
+
+        with zipfile.ZipFile(epub_path, "r") as zf:
+            ncx_content = zf.read("toc.ncx").decode()
+            assert "I" in ncx_content
+            assert "II" in ncx_content
+            assert "III" in ncx_content
 
 
 class TestFixEdgeCases:

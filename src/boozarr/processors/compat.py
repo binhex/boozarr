@@ -40,13 +40,21 @@ class CompatProcessor(BaseProcessor):
             return []
 
         issues: list[Issue] = []
+        self._scan_manifest_for_issues(root, issues)
+        self._check_namespace_prefixed_opf(root, issues)
+        return issues
+
+    @staticmethod
+    def _scan_manifest_for_issues(root: Any, issues: list[Issue]) -> None:
+        """Scan OPF manifest <item> elements for font and Apple content."""
         for item in root.iter():
             tag = item.tag.split("}")[-1] if "}" in item.tag else item.tag
-            if tag != "item":
-                continue
-            CompatProcessor._scan_item(item, issues)
+            if tag == "item":
+                CompatProcessor._scan_item(item, issues)
 
-        # Detect namespace-prefixed OPF
+    @staticmethod
+    def _check_namespace_prefixed_opf(root: Any, issues: list[Issue]) -> None:
+        """Append an issue if the OPF uses namespace-prefixed tags."""
         for elem in root.iter():
             if "}" in elem.tag:
                 tag_uri, _, _ = elem.tag.partition("}")
@@ -61,8 +69,6 @@ class CompatProcessor(BaseProcessor):
                         )
                     )
                     break
-
-        return issues
 
     @staticmethod
     def _scan_item(item: Any, issues: list[Issue]) -> None:
@@ -221,34 +227,53 @@ class CompatProcessor(BaseProcessor):
             return False
 
         opf_ns = "http://www.idpf.org/2007/opf"
-        changed = False
+        changed = CompatProcessor._rewrite_opf_element_tags(tree, opf_ns)
+        changed = CompatProcessor._rewrite_opf_element_attrs(tree, opf_ns) or changed
 
+        if changed:
+            CompatProcessor._write_normalised_opf(tree, str(opf_file), opf_ns)
+
+        return changed
+
+    @staticmethod
+    def _rewrite_opf_element_tags(tree: Any, opf_ns: str) -> bool:
+        """Strip OPF namespace prefix from element tags. Returns True if any tag was modified."""
+        changed = False
         for elem in tree.iter():
             tag_uri, _, tag_local = elem.tag.partition("}")
             if tag_uri and tag_uri.startswith("{") and tag_uri[1:] == opf_ns:
                 elem.tag = tag_local
                 changed = True
-            if hasattr(elem, "attrib"):
-                new_attrib: dict[str, str] = {}
-                for k, v in elem.attrib.items():
-                    ns_uri, _, local = k.partition("}")
-                    if ns_uri and ns_uri.startswith("{") and ns_uri[1:] == opf_ns:
-                        new_attrib[local] = v
-                        changed = True
-                    else:
-                        new_attrib[k] = v
-                elem.attrib = new_attrib
-
-        if changed:
-            root = tree.getroot()
-            root.set("xmlns", opf_ns)
-            ElementTree.register_namespace("", opf_ns)
-            for prefix, uri in CompatProcessor._collect_other_namespaces(root):
-                ElementTree.register_namespace(prefix, uri)
-            with contextlib.suppress(OSError):
-                tree.write(str(opf_file), xml_declaration=True, encoding="unicode")
-
         return changed
+
+    @staticmethod
+    def _rewrite_opf_element_attrs(tree: Any, opf_ns: str) -> bool:
+        """Strip OPF namespace prefix from element attributes. Returns True if any attr was modified."""
+        changed = False
+        for elem in tree.iter():
+            if not hasattr(elem, "attrib"):
+                continue
+            new_attrib: dict[str, str] = {}
+            for k, v in elem.attrib.items():
+                ns_uri, _, local = k.partition("}")
+                if ns_uri and ns_uri.startswith("{") and ns_uri[1:] == opf_ns:
+                    new_attrib[local] = v
+                    changed = True
+                else:
+                    new_attrib[k] = v
+            elem.attrib = new_attrib
+        return changed
+
+    @staticmethod
+    def _write_normalised_opf(tree: Any, opf_file: str, opf_ns: str) -> None:
+        """Write the normalised OPF tree to disk after registering default namespace."""
+        root = tree.getroot()
+        root.set("xmlns", opf_ns)
+        ElementTree.register_namespace("", opf_ns)
+        for prefix, uri in CompatProcessor._collect_other_namespaces(root):
+            ElementTree.register_namespace(prefix, uri)
+        with contextlib.suppress(OSError):
+            tree.write(opf_file, xml_declaration=True, encoding="unicode")
 
     @staticmethod
     def _strip_font_faces(extract_dir: Path, removed_hrefs: set[str]) -> None:
