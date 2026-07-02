@@ -606,14 +606,17 @@ class TestDiscoverChaptersMultiMatch:
         assert discovered == []
 
     def test_matches_roman_numeral_after_chapter_prefix(self, tmp_path: Path) -> None:
-        """'Chapter IV' or 'Part II' in body text should be detected as chapter markers."""
+        """'Chapter IV', 'Part II' and 'Book III' in body text should be detected as chapter markers."""
         extract_dir = tmp_path / "extracted"
         extract_dir.mkdir()
         xhtml = extract_dir / "book.xhtml"
-        xhtml.write_text("<html><body><p>Chapter IV — The Journey</p><p>Part II</p></body></html>")
+        xhtml.write_text("<html><body><p>Chapter IV — The Journey</p><p>Part II</p><p>Book III</p></body></html>")
         discovered = ChaptersProcessor._discover_chapters(extract_dir)
         labels = {m[1] for m in discovered}
+        assert len(discovered) == 3, f"Expected 3 matches, got {len(discovered)}"
         assert "Chapter IV" in labels
+        assert "Part II" in labels
+        assert "Book III" in labels
 
     def test_sorts_by_spine_order_when_opf_available(self, tmp_path: Path) -> None:
         extract_dir = tmp_path / "extracted"
