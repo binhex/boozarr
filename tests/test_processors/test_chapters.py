@@ -596,6 +596,25 @@ class TestDiscoverChaptersMultiMatch:
         # No matches (bad file skipped), so result is empty
         assert discovered == []
 
+    def test_does_not_match_chapter_in_body_prose(self, tmp_path: Path) -> None:
+        """'chapter of' in body text should not produce a false positive."""
+        extract_dir = tmp_path / "extracted"
+        extract_dir.mkdir()
+        xhtml = extract_dir / "story.xhtml"
+        xhtml.write_text("<html><body><p>The best chapter of his new book was missing.</p></body></html>")
+        discovered = ChaptersProcessor._discover_chapters(extract_dir)
+        assert discovered == []
+
+    def test_matches_roman_numeral_after_chapter_prefix(self, tmp_path: Path) -> None:
+        """'Chapter IV' or 'Part II' in body text should be detected as chapter markers."""
+        extract_dir = tmp_path / "extracted"
+        extract_dir.mkdir()
+        xhtml = extract_dir / "book.xhtml"
+        xhtml.write_text("<html><body><p>Chapter IV — The Journey</p><p>Part II</p></body></html>")
+        discovered = ChaptersProcessor._discover_chapters(extract_dir)
+        labels = {m[1] for m in discovered}
+        assert "Chapter IV" in labels
+
     def test_sorts_by_spine_order_when_opf_available(self, tmp_path: Path) -> None:
         extract_dir = tmp_path / "extracted"
         extract_dir.mkdir()

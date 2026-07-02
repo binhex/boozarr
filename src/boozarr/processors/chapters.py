@@ -15,7 +15,7 @@ _CHAPTER_PATTERNS = [
     re.compile(r"Chapter\s+\d+", re.IGNORECASE),
     re.compile(r"Part\s+\d+", re.IGNORECASE),
     re.compile(r"Section\s+\d+", re.IGNORECASE),
-    re.compile(r"CHAPTER\s+\w+", re.IGNORECASE),
+    re.compile(r"(?:Chapter|Part|Section|Book)\s+[IVXLCDM]{2,}\b", re.IGNORECASE),
     re.compile(r"<h[1-6][^>]*>\s*(\d+|[IVXLCDM]+)\s*</h[1-6]>", re.IGNORECASE),
 ]
 _SKIP_FILENAME_SUBSTRINGS: tuple[str, ...] = (
