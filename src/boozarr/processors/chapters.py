@@ -265,9 +265,8 @@ class ChaptersProcessor(BaseProcessor):
         discovered: list[tuple[str, str]] = []
         seen: set[tuple[str, int]] = set()
 
-        for xhtml_file in sorted(list(extract_dir.rglob("*.html")) + list(extract_dir.rglob("*.xhtml"))):
-            if xhtml_file.is_file():
-                ChaptersProcessor._scan_file_for_chapters(xhtml_file, extract_dir, discovered, seen)
+        for xhtml_file in sorted(p for p in extract_dir.rglob("*") if p.is_file() and p.suffix in (".html", ".xhtml")):
+            ChaptersProcessor._scan_file_for_chapters(xhtml_file, extract_dir, discovered, seen)
 
         if opf_path is not None and discovered:
             return _sort_by_spine_order(discovered, extract_dir, opf_path)
