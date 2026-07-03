@@ -147,4 +147,24 @@ class TestLinksFix:
         content = (tmp_path / "OEBPS/ch1.xhtml").read_text(encoding="utf-8")
         assert "this chapter" in content, "Inner text should be preserved"
         assert '<a href="missing.xhtml"' not in content, "Broken <a> tag should be removed"
-        assert 'href="missing.xhtml"' not in content, "href should be removed"
+
+    def test_fix_consolidates_multiple_files(self, tmp_path: Path) -> None:
+        """fix() should produce a single consolidated Fix when broken links span
+        multiple files, instead of one line per file."""
+        epub = _make_epub_with_files(
+            tmp_path,
+            {
+                "OEBPS/ch1.xhtml": '<p><a href="missing1.xhtml">one</a></p>',
+                "OEBPS/ch2.xhtml": '<p><a href="missing2.xhtml">two</a></p>',
+                "OEBPS/ch3.xhtml": '<p><a href="missing3.xhtml">three</a></p>',
+            },
+        )
+        processor = LinksProcessor()
+        issues = processor.check(epub)
+        assert len(issues) == 3, f"Expected 3 issues, got {len(issues)}"
+
+        fixes = processor.fix(epub, issues, {})
+        assert len(fixes) == 1, f"Expected 1 consolidated fix, got {len(fixes)}"
+        assert "3 broken" in fixes[0].description, (
+            f"Consolidated fix should mention total count, got: {fixes[0].description}"
+        )

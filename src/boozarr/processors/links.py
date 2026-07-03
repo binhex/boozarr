@@ -93,6 +93,7 @@ class LinksProcessor(BaseProcessor):
             file_hrefs.setdefault(file_path, []).append(href)
 
         fixes: list[Fix] = []
+        grand_total = 0
         for file_path, hrefs in file_hrefs.items():
             target = extract_dir / file_path
             if not target.is_file():
@@ -122,12 +123,15 @@ class LinksProcessor(BaseProcessor):
             except Exception:
                 continue
 
-            label = "broken link" if total_removed == 1 else "broken links"
+            grand_total += total_removed
+
+        if grand_total > 0:
+            label = "broken link" if grand_total == 1 else "broken links"
             fixes.append(
                 Fix(
                     processor=self.name,
-                    location=file_path,
-                    description=f"Removed {total_removed} {label} from {file_path}",
+                    location="",
+                    description=f"Removed {grand_total} {label}",
                     old_value="",
                     new_value="",
                 )
