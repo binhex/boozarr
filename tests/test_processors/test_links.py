@@ -89,6 +89,18 @@ class TestLinksCheck:
         issues = LinksProcessor().check(epub)
         assert issues == []
 
+    def test_broken_link_is_fixable(self, tmp_path: Path) -> None:
+        """A broken internal link should have fix_possible=True so fix() can act."""
+        epub = _make_epub_with_files(
+            tmp_path,
+            {
+                "OEBPS/ch1.xhtml": '<a href="missing.xhtml">click here</a>',
+            },
+        )
+        issues = LinksProcessor().check(epub)
+        assert len(issues) == 1
+        assert issues[0].fix_possible is True
+
     def test_no_extract_dir_returns_empty(self) -> None:
         epub = MagicMock()
         epub._extract_dir = None
@@ -117,6 +129,22 @@ class TestLinksCheck:
 
 
 class TestLinksFix:
-    def test_fix_returns_empty(self) -> None:
-        fixes = LinksProcessor().fix(MagicMock(), [], {})
-        assert fixes == []
+    def test_fix_removes_broken_link_tag(self, tmp_path: Path) -> None:
+        """fix() should strip the <a> tag for broken internal links, keeping inner text."""
+        epub = _make_epub_with_files(
+            tmp_path,
+            {
+                "OEBPS/ch1.xhtml": '<p>Read <a href="missing.xhtml">this chapter</a> for details.</p>',
+            },
+        )
+        processor = LinksProcessor()
+        issues = processor.check(epub)
+        assert len(issues) == 1, f"Expected 1 issue, got {len(issues)}"
+
+        fixes = processor.fix(epub, issues, {})
+        assert len(fixes) == 1, f"Expected 1 fix, got {len(fixes)}"
+
+        content = (tmp_path / "OEBPS/ch1.xhtml").read_text(encoding="utf-8")
+        assert "this chapter" in content, "Inner text should be preserved"
+        assert '<a href="missing.xhtml"' not in content, "Broken <a> tag should be removed"
+        assert 'href="missing.xhtml"' not in content, "href should be removed"

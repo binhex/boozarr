@@ -32,7 +32,9 @@ class LinksProcessor(BaseProcessor):
             except Exception:
                 continue
             for match in _HREF_RE.finditer(content):
-                issue = LinksProcessor._check_link(match.group(1), extracted_files, check_external)
+                issue = LinksProcessor._check_link(
+                    match.group(1), extracted_files, check_external, str(xhtml_file.relative_to(extract_dir))
+                )
                 if issue is not None:
                     issues.append(issue)
         return issues
@@ -43,7 +45,7 @@ class LinksProcessor(BaseProcessor):
         return [str(f.relative_to(extract_dir)) for f in extract_dir.rglob("*") if f.is_file()]
 
     @staticmethod
-    def _check_link(href: str, extracted_files: list[str], check_external: bool) -> Issue | None:
+    def _check_link(href: str, extracted_files: list[str], check_external: bool, source_file: str = "") -> Issue | None:
         """Check a single href and return an Issue if it's broken, or None."""
         parsed = urlparse(href)
         if parsed.scheme and parsed.scheme not in ("http", "https"):
@@ -63,14 +65,67 @@ class LinksProcessor(BaseProcessor):
             return Issue(
                 processor=LinksProcessor.name,
                 severity="warn",
-                location=f"link: {href}",
+                location=f"link: {source_file}: {href}",
                 description=f"Broken internal reference: {href}",
-                fix_possible=False,
+                fix_possible=True,
             )
         return None
 
     def fix(self, epub: Any, issues: list[Issue], config: dict[str, Any]) -> list[Fix]:
-        return []
+        """Remove broken internal <a> tags, keeping their inner text."""
+        extract_dir = getattr(epub, "_extract_dir", None)
+        if extract_dir is None:
+            return []
+
+        fixes: list[Fix] = []
+        for issue in issues:
+            if "ext-link" in (issue.location or ""):
+                continue  # external links can't be fixed
+            if not issue.location or ": " not in issue.location:
+                continue
+            # Parse location: "link: <source_file>: <href>"
+            if not issue.location.startswith("link: "):
+                continue
+            rest = issue.location[6:]  # strip "link: " prefix
+            idx = rest.rfind(": ")
+            if idx == -1:
+                continue
+            file_path = rest[:idx]
+            href = rest[idx + 2 :]
+
+            target = extract_dir / file_path
+            if not target.is_file():
+                continue
+            try:
+                content = target.read_text(encoding="utf-8")
+            except Exception:
+                continue
+
+            # Build a regex that matches <a href="href"...>text</a>
+            escaped_href = re.escape(href)
+            fix_pat = re.compile(
+                r'<a\b[^>]*\bhref\s*=\s*["\']' + escaped_href + r'["\'][^>]*>(.*?)</a>',
+                re.IGNORECASE | re.DOTALL,
+            )
+            new_content, count = fix_pat.subn(r"\1", content)
+            if count == 0:
+                continue
+
+            try:
+                target.write_text(new_content, encoding="utf-8")
+            except Exception:
+                continue
+
+            fixes.append(
+                Fix(
+                    processor=self.name,
+                    location=file_path,
+                    description=f"Removed broken link: {href}",
+                    old_value=href,
+                    new_value="",
+                )
+            )
+        return fixes
 
     @staticmethod
     def _target_exists(extracted_files: list[str], href: str) -> bool:
