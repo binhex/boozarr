@@ -77,22 +77,23 @@ class LinksProcessor(BaseProcessor):
         if extract_dir is None:
             return []
 
-        fixes: list[Fix] = []
+        # Group issues by source file
+        file_hrefs: dict[str, list[str]] = {}
         for issue in issues:
             if "ext-link" in (issue.location or ""):
-                continue  # external links can't be fixed
-            if not issue.location or ": " not in issue.location:
                 continue
-            # Parse location: "link: <source_file>: <href>"
-            if not issue.location.startswith("link: "):
+            if not issue.location or not issue.location.startswith("link: "):
                 continue
-            rest = issue.location[6:]  # strip "link: " prefix
+            rest = issue.location[len("link: ") :]
             idx = rest.rfind(": ")
             if idx == -1:
                 continue
             file_path = rest[:idx]
             href = rest[idx + 2 :]
+            file_hrefs.setdefault(file_path, []).append(href)
 
+        fixes: list[Fix] = []
+        for file_path, hrefs in file_hrefs.items():
             target = extract_dir / file_path
             if not target.is_file():
                 continue
@@ -101,27 +102,33 @@ class LinksProcessor(BaseProcessor):
             except Exception:
                 continue
 
-            # Build a regex that matches <a href="href"...>text</a>
-            escaped_href = re.escape(href)
-            fix_pat = re.compile(
-                r'<a\b[^>]*\bhref\s*=\s*["\']' + escaped_href + r'["\'][^>]*>(.*?)</a>',
-                re.IGNORECASE | re.DOTALL,
-            )
-            new_content, count = fix_pat.subn(r"\1", content)
-            if count == 0:
+            total_removed = 0
+            for href in hrefs:
+                escaped_href = re.escape(href)
+                fix_pat = re.compile(
+                    r'<a\b[^>]*\bhref\s*=\s*["\']' + escaped_href + r'["\'][^>]*>(.*?)</a>',
+                    re.IGNORECASE | re.DOTALL,
+                )
+                new_content, count = fix_pat.subn(r"\1", content)
+                if count > 0:
+                    content = new_content
+                    total_removed += count
+
+            if total_removed == 0:
                 continue
 
             try:
-                target.write_text(new_content, encoding="utf-8")
+                target.write_text(content, encoding="utf-8")
             except Exception:
                 continue
 
+            label = "broken link" if total_removed == 1 else "broken links"
             fixes.append(
                 Fix(
                     processor=self.name,
                     location=file_path,
-                    description=f"Removed broken link: {href}",
-                    old_value=href,
+                    description=f"Removed {total_removed} {label} from {file_path}",
+                    old_value="",
                     new_value="",
                 )
             )
