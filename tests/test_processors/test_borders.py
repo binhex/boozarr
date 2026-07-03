@@ -356,9 +356,11 @@ class TestBordersTargetMap:
 
 
 class TestRewriteInlineStyles:
-    """Tests for _rewrite_inline_styles static method."""
+    """Tests for rewrite_inline_styles in the shared CSS utils module."""
 
     def test_rewrites_inline_style_properties(self, tmp_path: Path) -> None:
+        from boozarr.processors._css_utils import rewrite_inline_styles
+
         extract_dir = tmp_path / "extracted"
         extract_dir.mkdir()
         xhtml = extract_dir / "page.xhtml"
@@ -366,38 +368,44 @@ class TestRewriteInlineStyles:
             "<html><head><style>p { margin: 0pt; padding: 0pt; border: 1px solid; }</style></head><body></body></html>"
         )
         target_map = {"margin": "5px", "padding": "2px", "border": "0"}
-        BordersProcessor._rewrite_inline_styles(extract_dir, target_map)
+        rewrite_inline_styles(extract_dir, target_map)
         result = xhtml.read_text()
         assert "margin: 5px" in result
         assert "padding: 2px" in result
         assert "border: 0" in result
 
     def test_no_change_when_values_already_match(self, tmp_path: Path) -> None:
+        from boozarr.processors._css_utils import rewrite_inline_styles
+
         extract_dir = tmp_path / "extracted"
         extract_dir.mkdir()
         xhtml = extract_dir / "page.xhtml"
         xhtml.write_text("<html><head><style>p { margin: 5px; }</style></head><body></body></html>")
         target_map = {"margin": "5px"}
-        BordersProcessor._rewrite_inline_styles(extract_dir, target_map)
+        rewrite_inline_styles(extract_dir, target_map)
         result = xhtml.read_text()
         assert result.count("margin: 5px") == 1  # no extra insertions
 
     def test_skips_non_xhtml_files(self, tmp_path: Path) -> None:
+        from boozarr.processors._css_utils import rewrite_inline_styles
+
         extract_dir = tmp_path / "extracted"
         extract_dir.mkdir()
         txt = extract_dir / "notes.txt"
         txt.write_text("margin: 10px")
         target_map = {"margin": "5px"}
-        BordersProcessor._rewrite_inline_styles(extract_dir, target_map)
+        rewrite_inline_styles(extract_dir, target_map)
         assert txt.read_text() == "margin: 10px"  # unchanged
 
     def test_preserves_non_target_properties(self, tmp_path: Path) -> None:
+        from boozarr.processors._css_utils import rewrite_inline_styles
+
         extract_dir = tmp_path / "extracted"
         extract_dir.mkdir()
         xhtml = extract_dir / "page.xhtml"
         xhtml.write_text("<html><head><style>p { margin: 0pt; color: red; font-size: 1em; }</style></head></html>")
         target_map = {"margin": "5px"}
-        BordersProcessor._rewrite_inline_styles(extract_dir, target_map)
+        rewrite_inline_styles(extract_dir, target_map)
         result = xhtml.read_text()
         assert "color: red" in result
         assert "font-size: 1em" in result

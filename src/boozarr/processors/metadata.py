@@ -92,8 +92,23 @@ class MetadataProcessor(BaseProcessor):
                 elem = ElementTree.SubElement(meta, tag)
                 elem.text = value
 
+        # Register OPF default namespace before serialising to prevent ElementTree
+        # from introducing ns0: prefix aliases on bare-namespace EPUBs.
+        ElementTree.register_namespace("", "http://www.idpf.org/2007/opf")
+        MetadataProcessor._register_opf_namespaces(root)
         tree.write(opf_path, xml_declaration=True, encoding="utf-8")
         return True
+
+    @staticmethod
+    def _register_opf_namespaces(root: Any) -> None:
+        """Register XML namespaces from root element attributes to prevent
+        ElementTree from introducing ns: prefix aliases on write()."""
+        for key, value in root.attrib.items():
+            if key == "xmlns" and value:
+                ElementTree.register_namespace("", value)
+            elif key.startswith("xmlns:"):
+                prefix = key.split(":", 1)[1]
+                ElementTree.register_namespace(prefix, value)
 
     @staticmethod
     def _find_metadata(root: ElementTree.Element) -> ElementTree.Element | None:

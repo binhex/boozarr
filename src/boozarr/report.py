@@ -16,6 +16,19 @@ class Report:
     total_fixes: int = 0
     _fix_details_list: list[str] = field(default_factory=list, repr=False)
 
+    @staticmethod
+    def _resolve_tag(status: str) -> str:
+        """Map a processing status string to a display tag like [OK], [WARN], etc."""
+        if status == STATUS_OK:
+            return "[OK]"
+        if status == STATUS_WARN:
+            return "[WARN]"
+        if status == STATUS_ERROR:
+            return "[ERR]"
+        if status == STATUS_SKIP:
+            return "[SKIP]"
+        return f"[?{status.upper()}?]"
+
     def log_line(
         self,
         file_path: str,
@@ -32,22 +45,16 @@ class Report:
         self.total += 1
         self.total_issues += issues
         self.total_fixes += fixes
-        filename = file_path
-        if status == STATUS_OK:
-            tag = "[OK]"
-        elif status == STATUS_WARN:
-            tag = "[WARN]" if fixes == 0 else "[MODIFY]"
-        elif status == STATUS_ERROR:
-            tag = "[ERR]"
+        if status not in (STATUS_OK, STATUS_WARN, STATUS_SKIP):
             self.errors += 1
         elif status == STATUS_SKIP:
-            tag = "[SKIP]"
             self.skipped += 1
-        else:
-            tag = f"[?{status.upper()}?]"
-            self.errors += 1
+        tag = self._resolve_tag(status)
+        # WARN → MODIFY when fixes were applied
+        if status == STATUS_WARN and fixes > 0:
+            tag = "[MODIFY]"
         suffix = " (dry-run)" if dry_run else ""
-        line = f"{tag:8} {filename} — {issues} issues, {fixes} fixes{suffix}"
+        line = f"{tag:8} {file_path} — {issues} issues, {fixes} fixes{suffix}"
         if fix_details:
             line += "\n" + "\n".join(f"         - {d}" for d in fix_details)
             self._fix_details_list.extend(fix_details)

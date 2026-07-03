@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
+import re
 import shutil
 import tempfile
 import traceback
@@ -131,6 +133,8 @@ class Pipeline:
                 try:
                     tmp_path.replace(epub_path)
                 except OSError as exc:
+                    with contextlib.suppress(OSError):
+                        tmp_path.unlink(missing_ok=True)
                     return self._make_error(epub_path, exc)
                 # Recompute hash from the (now modified) file
                 wrapper.refresh_hash()
@@ -141,40 +145,39 @@ class Pipeline:
         return self._record_and_return(epub_path, wrapper, overall, total_issues, total_fixes, fix_details)
 
     def _run_processors(self, wrapper: EpubWrapper, epub_path: Path) -> tuple[int, int, str, list[str]]:
-        """Run each processor's check and collect fix details.
-
-        ``fix()`` is called whenever issues are found so details can be
-        reported, but fixes are only counted and persisted when ``self.fix`` is
-        True.
-
-        Returns a tuple of ``(total_issues, total_fixes, overall,
-        fix_details)``.
-        """
+        """Run each processor's check and collect fix details."""
         total_issues = 0
         total_fixes = 0
         overall = STATUS_OK
         fix_details: list[str] = []
         for proc in self.processors:
             try:
-                issues = proc.check(wrapper, self.config)
-                total_issues += len(issues)
-                self.db.log_event(str(epub_path), proc.name, "check", f"{len(issues)} issues")
-                if issues:
-                    fixes = proc.fix(wrapper, issues, self.config)
-                    total_fixes += len(fixes) if self.fix else 0
-                    if fixes:
-                        self.db.log_event(
-                            str(epub_path), proc.name, "fix" if self.fix else "dry-run", f"{len(fixes)} fixes"
-                        )
-                        for fix in fixes:
-                            fix_details.append(self._format_fix_detail(proc, fix))
-                    else:
-                        for iss in issues:
-                            fix_details.append(f"{proc.name}: {iss.description}")
+                pi, pf = self._run_one_processor(proc, wrapper, epub_path, fix_details)
+                total_issues += pi
+                total_fixes += pf
             except Exception:
                 self.db.log_event(str(epub_path), proc.name, "error", traceback.format_exc())
                 overall = STATUS_ERROR
         return total_issues, total_fixes, overall, fix_details
+
+    def _run_one_processor(
+        self, proc: Any, wrapper: EpubWrapper, epub_path: Path, fix_details: list[str]
+    ) -> tuple[int, int]:
+        """Run check + fix for one processor. Returns (issues_count, fixes_count)."""
+        issues = proc.check(wrapper, self.config)
+        self.db.log_event(str(epub_path), proc.name, "check", f"{len(issues)} issues")
+        if not issues:
+            return len(issues), 0
+        fixes = proc.fix(wrapper, issues, self.config)
+        fix_count = len(fixes) if self.fix else 0
+        if fixes:
+            self.db.log_event(str(epub_path), proc.name, "fix" if self.fix else "dry-run", f"{len(fixes)} fixes")
+            for fix in fixes:
+                fix_details.append(self._format_fix_detail(proc, fix))
+        else:
+            for iss in issues:
+                fix_details.append(f"{proc.name}: {iss.description}")
+        return len(issues), fix_count
 
     @staticmethod
     def _format_fix_detail(proc: Any, fix: Any) -> str:
@@ -185,8 +188,22 @@ class Pipeline:
         """
         if not fix.old_value and not fix.new_value:
             return f"{proc.name}: {fix.description}"
-        prop_name = fix.location.split()[-1].strip("()")
+        prop_name = _extract_property_label(fix.location)
         old = fix.old_value or "?"
         new_val = fix.new_value or "?"
         arrow = " \u2192 " if old != new_val else " == "
         return f"{proc.name}: {prop_name} {old}{arrow}{new_val}"
+
+
+def _extract_property_label(location: str) -> str:
+    """Extract a human-readable property label from a Fix location string.
+
+    For CSS processor locations like ``"CSS (padding)"``, extracts the
+    property name from inside the parentheses.  For plain locations like
+    ``"archive root"`` or ``"compression"``, returns the full location string.
+    """
+    location_str = str(location)
+    m = re.match(r".+\((.+)\)", location_str)
+    if m:
+        return m.group(1)
+    return location_str

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 
 from boozarr.processors.base import BaseProcessor, Fix, Issue
@@ -46,15 +47,24 @@ class CompressionProcessor(BaseProcessor):
 
     @staticmethod
     def _find_extraneous(extract_dir: Any) -> list[str]:
-        """Find extraneous files (DS_Store, thumbs.db) in the extract dir."""
+        """Find extraneous files (DS_Store, thumbs.db) in the extract dir tree."""
         if extract_dir is None:
             return []
         extra_lower = {e.lower() for e in _EXTRA}
-        return [f.name for f in extract_dir.iterdir() if f.is_file() and f.name.lower() in extra_lower]
+        return [
+            str(f.relative_to(extract_dir))
+            for f in extract_dir.rglob("*")
+            if f.is_file() and f.name.lower() in extra_lower
+        ]
 
     def fix(self, epub: Any, issues: list[Issue], config: dict[str, Any]) -> list[Fix]:
         epub._compress_level = config.get("compress")
         fixes: list[Fix] = []
+
+        extract_dir = getattr(epub, "_extract_dir", None)
+        if extract_dir is not None:
+            CompressionProcessor._delete_extraneous(extract_dir)
+
         for i in issues:
             if i.location == "compression":
                 fixes.append(
@@ -77,3 +87,12 @@ class CompressionProcessor(BaseProcessor):
                     )
                 )
         return fixes
+
+    @staticmethod
+    def _delete_extraneous(extract_dir: Any) -> None:
+        """Delete extraneous files from disk."""
+        extra_lower = {e.lower() for e in _EXTRA}
+        for f in extract_dir.rglob("*"):
+            if f.is_file() and f.name.lower() in extra_lower:
+                with contextlib.suppress(OSError):
+                    f.unlink()

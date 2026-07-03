@@ -239,3 +239,98 @@ class TestMetadataProcessorIntegration:
         wrapper2 = EpubWrapper(epub_path)
         issues_after = processor.check(wrapper2)
         assert len(issues_after) == 0, f"Expected 0 issues after fix, got {len(issues_after)}"
+
+
+class TestRegisterOpfNamespaces:
+    """Integration tests for OPF namespace preservation during metadata write."""
+
+    def test_write_opf_preserves_bare_namespace_tags(self, tmp_path: Path) -> None:
+        """After _write_opf, bare-tag OPF should not have ns0: prefixes."""
+        import zipfile
+
+        from boozarr.epub import EpubWrapper
+        from boozarr.processors.metadata import MetadataProcessor
+
+        epub_path = tmp_path / "book.epub"
+        # Create an EPUB with bare OPF tags (default namespace)
+        with zipfile.ZipFile(epub_path, "w") as zf:
+            zf.writestr(
+                "META-INF/container.xml",
+                '<?xml version="1.0"?><container>'
+                '<rootfiles><rootfile full-path="OEBPS/content.opf"/></rootfiles></container>',
+            )
+            zf.writestr(
+                "OEBPS/content.opf",
+                '<?xml version="1.0"?>'
+                '<package xmlns="http://www.idpf.org/2007/opf" version="2.0">'
+                "<metadata></metadata></package>",
+            )
+            zf.writestr("OEBPS/ch1.xhtml", "<html><body><p>Test</p></body></html>")
+
+        wrapper = EpubWrapper(epub_path)
+        extract_dir = tmp_path / "extracted"
+        wrapper.extract(extract_dir)
+
+        processor = MetadataProcessor()
+        issues = processor.check(wrapper)
+        assert len(issues) == 4
+
+        fields = ["dc:title", "dc:creator", "dc:language", "dc:date"]
+        processor.fix(
+            wrapper,
+            [MagicMock(location="OEBPS/content.opf", description=f"Missing {f}", processor="metadata") for f in fields],
+            {},
+        )
+
+        # Read the OPF back — should have no ns0: prefixes
+        opf_after = (extract_dir / "OEBPS/content.opf").read_text()
+        assert "ns0:" not in opf_after, f"Namespace prefix leaked: {opf_after[:300]}"
+        assert "<package" in opf_after
+        assert "dc:title" in opf_after
+
+    def test_write_opf_preserves_prefixed_namespace(self, tmp_path: Path) -> None:
+        """After _write_opf, OPF with existing xmlns:dc should keep the dc prefix."""
+        import zipfile
+        from unittest.mock import MagicMock
+
+        from boozarr.epub import EpubWrapper
+        from boozarr.processors.metadata import MetadataProcessor
+
+        epub_path = tmp_path / "book.epub"
+        with zipfile.ZipFile(epub_path, "w") as zf:
+            zf.writestr(
+                "META-INF/container.xml",
+                '<?xml version="1.0"?><container>'
+                '<rootfiles><rootfile full-path="OEBPS/content.opf"/></rootfiles></container>',
+            )
+            zf.writestr(
+                "OEBPS/content.opf",
+                '<?xml version="1.0"?>'
+                '<package xmlns="http://www.idpf.org/2007/opf"'
+                ' xmlns:dc="http://purl.org/dc/elements/1.1/" version="2.0">'
+                "<metadata></metadata></package>",
+            )
+            zf.writestr("OEBPS/ch1.xhtml", "<html><body><p>Test</p></body></html>")
+
+        wrapper = EpubWrapper(epub_path)
+        extract_dir = tmp_path / "extracted"
+        wrapper.extract(extract_dir)
+
+        processor = MetadataProcessor()
+        processor.fix(
+            wrapper, [MagicMock(location="OEBPS/content.opf", description="Missing dc:title", processor="metadata")], {}
+        )
+
+        opf_after = (extract_dir / "OEBPS/content.opf").read_text()
+        assert "ns0:" not in opf_after, f"Namespace prefix leaked: {opf_after[:300]}"
+        assert 'xmlns:dc="http://purl.org/dc/elements/1.1/"' in opf_after
+
+    def test_register_handles_no_xmlns(self) -> None:
+        """Root element with no xmlns attributes should not crash."""
+        from xml.etree import ElementTree
+
+        from boozarr.processors.metadata import MetadataProcessor
+
+        root = ElementTree.fromstring("<package/>")
+        # Should not raise
+        MetadataProcessor._register_opf_namespaces(root)
