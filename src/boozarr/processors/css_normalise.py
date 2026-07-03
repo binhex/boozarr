@@ -8,14 +8,17 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from pathlib import Path
 
+from boozarr.processors._css_utils import (
+    rewrite_css_file,
+    rewrite_inline_styles,
+    scan_css_files,
+    scan_xhtml_styles,
+)
 from boozarr.processors.base import BaseProcessor, Fix, Issue
 from boozarr.utils import normalize_css_value
 
-_PARAGRAPH_PROPS = ["font-size", "line-height", "text-align", "text-indent"]
+_PARAGRAPH_PROPS = ("font-size", "line-height", "text-align", "text-indent")
 
-_CSS_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
-_CSS_RULESET_RE = re.compile(r"([^{]+)\{([^}]*)\}")
-_CSS_PROPERTY_RE = re.compile(r"([\w-]+)\s*:\s*(.+?)\s*(?:;|$)")
 _OLD_VALUE_RE = re.compile(r"'([^']+)'")
 
 
@@ -23,104 +26,16 @@ class CssNormaliseProcessor(BaseProcessor):
     name = "css_normalise"
 
     @staticmethod
-    def _scan_css_files(extract_dir: Path, props: dict[str, str]) -> None:
-        for css_file in extract_dir.rglob("*.css"):
-            if css_file.is_file():
-                CssNormaliseProcessor._parse_css_file(css_file, props)
-
-    @staticmethod
-    def _scan_xhtml_styles(extract_dir: Path, props: dict[str, str]) -> None:
-        for xhtml_file in extract_dir.rglob("*.xhtml"):
-            if not xhtml_file.is_file():
-                continue
-            try:
-                content = xhtml_file.read_text(encoding="utf-8")
-            except Exception:
-                continue
-            for style_match in re.finditer(r"<style[^>]*>(.*?)</style>", content, re.IGNORECASE | re.DOTALL):
-                _parse_css_text(style_match.group(1), props)
-
-    @staticmethod
     def _collect_paragraph_props(extract_dir: Path) -> dict[str, str]:
         """Scan CSS and <style> blocks for paragraph-level property:value pairs."""
         props: dict[str, str] = {}
-        CssNormaliseProcessor._scan_css_files(extract_dir, props)
-        CssNormaliseProcessor._scan_xhtml_styles(extract_dir, props)
+        scan_css_files(extract_dir, props, _PARAGRAPH_PROPS)
+        scan_xhtml_styles(extract_dir, props, _PARAGRAPH_PROPS)
         return props
 
-    @staticmethod
-    def _parse_css_file(file_path: Path, props: dict[str, str]) -> None:
-        try:
-            content = file_path.read_text(encoding="utf-8")
-        except Exception:
-            return
-        _parse_css_text(content, props)
-
-    @staticmethod
-    def _rewrite_css_file(file_path: Path, target_map: dict[str, str]) -> None:
-        try:
-            content = file_path.read_text(encoding="utf-8")
-        except Exception:
-            return
-        new_content = CssNormaliseProcessor._rewrite_css_text(content, target_map)
-        if new_content != content:
-            file_path.write_text(new_content, encoding="utf-8")
-
-    @staticmethod
-    def _rewrite_inline_styles(extract_dir: Path, target_map: dict[str, str]) -> None:
-        for xhtml_file in extract_dir.rglob("*.xhtml"):
-            if not xhtml_file.is_file():
-                continue
-            try:
-                content = xhtml_file.read_text(encoding="utf-8")
-            except Exception:
-                continue
-            new_content = content
-            for style_match in re.finditer(r"(<style[^>]*>)(.*?)(</style>)", content, re.IGNORECASE | re.DOTALL):
-                old_style = style_match.group(0)
-                css_text = style_match.group(2)
-                new_css = CssNormaliseProcessor._rewrite_css_text(css_text, target_map)
-                if new_css != css_text:
-                    new_style = style_match.group(1) + new_css + style_match.group(3)
-                    new_content = new_content.replace(old_style, new_style, 1)
-            if new_content != content:
-                xhtml_file.write_text(new_content, encoding="utf-8")
-
-    @staticmethod
-    def _rewrite_css_text(css_text: str, target_map: dict[str, str]) -> str:
-
-        def replace_props(match: re.Match) -> str:
-            selector = match.group(1)
-            body = match.group(2)
-            # Split body into code and comment segments so replacements never
-            # accidentally modify text inside CSS comments.
-            segments: list[str] = []
-            last_end = 0
-            for cm in _CSS_COMMENT_RE.finditer(body):
-                if cm.start() > last_end:
-                    segments.append(body[last_end : cm.start()])  # code
-                segments.append(cm.group(0))  # comment
-                last_end = cm.end()
-            if last_end < len(body):
-                segments.append(body[last_end:])  # trailing code
-            # Only process code segments (even indices)
-            for i in range(0, len(segments), 2):
-                code = segments[i]
-                for prop_match in _CSS_PROPERTY_RE.finditer(code):
-                    prop = prop_match.group(1).strip().lower()
-                    if prop in target_map:
-                        full_match = prop_match.group(0)
-                        has_semi = full_match.rstrip().endswith(";")
-                        suffix = ";" if has_semi else ""
-                        code = code.replace(full_match, f"{prop}: {target_map[prop]}{suffix}", 1)
-                segments[i] = code
-            new_body = "".join(segments)
-            return f"{selector}{{{new_body}}}"
-
-        return _CSS_RULESET_RE.sub(replace_props, css_text)
-
     def check(self, epub: Any, config: dict[str, Any] | None = None) -> list[Issue]:
-        """Scan CSS files and report non-standard values for configured properties only.
+        """Scan CSS files and inline <style> blocks, reporting non-standard values
+        for configured properties only.
 
         When *config* is ``None`` or empty, no issues are reported.
         Each configured property is only reported when its CSS value differs
@@ -135,10 +50,18 @@ class CssNormaliseProcessor(BaseProcessor):
             return []
 
         props = self._collect_paragraph_props(extract_dir)
+        # Normalize collected CSS values for comparison (consistent with borders.py)
+        normalized_props: dict[str, str] = {}
+        for k, v in props.items():
+            if k == "font-size":
+                normalized_props[k] = normalize_css_value(v)
+            else:
+                normalized_props[k] = v
+
         issues: list[Issue] = []
         for prop, target in target_map.items():
-            val = props.get(prop)
-            if val and val.lower() != target.lower():
+            val = normalized_props.get(prop)
+            if _value_differs(val, target):
                 issues.append(
                     Issue(
                         processor=self.name,
@@ -187,8 +110,8 @@ class CssNormaliseProcessor(BaseProcessor):
         # Apply fixes to all CSS files and inline <style> blocks
         for css_file in extract_dir.rglob("*.css"):
             if css_file.is_file():
-                self._rewrite_css_file(css_file, target_map)
-        self._rewrite_inline_styles(extract_dir, target_map)
+                rewrite_css_file(css_file, target_map)
+        rewrite_inline_styles(extract_dir, target_map)
         return [
             Fix(
                 processor=self.name,
@@ -210,18 +133,8 @@ def _extract_old_value(description: str) -> str:
     return description
 
 
-def _parse_css_text(css_text: str, props: dict[str, str]) -> None:
-    """Parse CSS text and populate *props* with paragraph-level property:value pairs."""
-    cleaned = _CSS_COMMENT_RE.sub("", css_text)
-    for rule_match in _CSS_RULESET_RE.finditer(cleaned):
-        body = rule_match.group(2)
-        for prop_match in _CSS_PROPERTY_RE.finditer(body):
-            prop_name = prop_match.group(1).strip().lower()
-            prop_value = prop_match.group(2).strip()
-            if prop_name in _PARAGRAPH_PROPS:
-                # font-size is length-based and needs unit normalization;
-                # line-height and text-align can be unitless/keyword values.
-                if prop_name == "font-size":
-                    props[prop_name] = normalize_css_value(prop_value)
-                else:
-                    props[prop_name] = prop_value
+def _value_differs(val: str | None, target: str) -> bool:
+    """Return True if *val* is not None and differs from *target* (case-insensitive)."""
+    if val is None:
+        return False
+    return val.lower() != target.lower()
