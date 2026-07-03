@@ -77,20 +77,58 @@ class CleanupProcessor(BaseProcessor):
         )
 
     def fix(self, epub: Any, issues: list[Issue], config: dict[str, Any]) -> list[Fix]:
-        """Remove empty <p>, <div>, and <span> elements from XHTML files."""
+        """Remove empty elements and leading nbsp from XHTML files.
+
+        Returns a single aggregated Fix so the log shows one concise summary
+        line instead of one line per file (reducing log spam for books with
+        many XHTML files).
+        """
         extract_dir = getattr(epub, "_extract_dir", None)
         if extract_dir is None:
             return []
-        fixes: list[Fix] = []
+        total_empty = 0
+        total_nbsp = 0
+        files_changed = 0
         for xhtml_file in sorted(extract_dir.rglob("*.xhtml")):
-            fix = CleanupProcessor._fix_file(xhtml_file)
-            if fix is not None:
-                fixes.append(fix)
-        return fixes
+            result = CleanupProcessor._fix_file(xhtml_file)
+            if result is not None:
+                empty_count, nbsp_count = result
+                total_empty += empty_count
+                total_nbsp += nbsp_count
+                files_changed += 1
+
+        if files_changed == 0:
+            return []
+
+        return [
+            Fix(
+                processor=self.name,
+                location="",
+                description=CleanupProcessor._build_summary(total_empty, total_nbsp, files_changed),
+                old_value="",
+                new_value="",
+            )
+        ]
 
     @staticmethod
-    def _fix_file(xhtml_file: Any) -> Fix | None:
-        """Clean up empty elements in one XHTML file. Returns Fix or None."""
+    def _build_summary(total_empty: int, total_nbsp: int, files_changed: int) -> str:
+        """Build a human-readable summary of cleanup changes."""
+        parts: list[str] = []
+        if total_empty:
+            label = "elements" if total_empty != 1 else "element"
+            parts.append(f"{total_empty} empty {label}")
+        if total_nbsp:
+            parts.append(f"{total_nbsp} leading nbsp")
+        file_label = "files" if files_changed != 1 else "file"
+        return f"Removed {' and '.join(parts)} across {files_changed} {file_label}"
+
+    @staticmethod
+    def _fix_file(xhtml_file: Any) -> tuple[int, int] | None:
+        """Clean up empty elements in one XHTML file.
+
+        Returns ``(empty_tag_count, nbsp_count)`` or ``None`` if no changes
+        were needed.  The actual file is modified on disk.
+        """
         if not xhtml_file.is_file():
             return None
         try:
@@ -98,29 +136,19 @@ class CleanupProcessor(BaseProcessor):
         except Exception:
             return None
         new_content = content
+        empty_count = 0
+        nbsp_count = 0
         while True:
             prev = new_content
+            before_nbsp = new_content
             new_content = _LEADING_NBSP_RE.sub(r"\1", new_content)
+            nbsp_count += len(_LEADING_NBSP_RE.findall(before_nbsp))
+            before_empty = new_content
             new_content = _EMPTY_ELEMENT_RE.sub("", new_content)
+            empty_count += len(_EMPTY_ELEMENT_RE.findall(before_empty))
             if new_content == prev:
                 break
         if new_content == content:
             return None
         xhtml_file.write_text(new_content, encoding="utf-8")
-        count = len(_EMPTY_ELEMENT_RE.findall(content))
-        nbsp_count = len(_LEADING_NBSP_RE.findall(content))
-        parts = []
-        old_parts = []
-        if count:
-            parts.append(f"{count} empty element(s)")
-            old_parts.append(f"{count} empty tags")
-        if nbsp_count:
-            parts.append(f"{nbsp_count} leading nbsp(s)")
-            old_parts.append(f"{nbsp_count} leading nbsp")
-        return Fix(
-            processor=CleanupProcessor.name,
-            location=f"xhtml: {xhtml_file.name}",
-            description=f"Stripped {'; '.join(parts)}",
-            old_value=", ".join(old_parts),
-            new_value="removed",
-        )
+        return (empty_count, nbsp_count)
