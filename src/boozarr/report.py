@@ -36,7 +36,7 @@ class Report:
         if status == STATUS_OK:
             tag = "[OK]"
         elif status == STATUS_WARN:
-            tag = "[MODIFY]"
+            tag = "[WARN]" if fixes == 0 else "[MODIFY]"
         elif status == STATUS_ERROR:
             tag = "[ERR]"
             self.errors += 1
