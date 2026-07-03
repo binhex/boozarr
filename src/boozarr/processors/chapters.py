@@ -49,15 +49,21 @@ class ChaptersProcessor(BaseProcessor):
 
     @staticmethod
     def _find_ncx_path(epub: Any) -> str | None:
-        """Locate the NCX file inside the EPUB."""
+        """Locate the NCX file inside the EPUB.
+
+        Prefers the OPF-resolved path over a root ``toc.ncx`` so that
+        ``check()`` and ``fix()`` use the same canonical NCX file.
+        """
         try:
-            epub.read_file("toc.ncx")
-            return "toc.ncx"
+            opf_path = epub.get_opf_path()
+            result = ChaptersProcessor._search_opf_for_ncx(epub, opf_path)
+            if result is not None:
+                return result
         except Exception:
             pass
         try:
-            opf_path = epub.get_opf_path()
-            return ChaptersProcessor._search_opf_for_ncx(epub, opf_path)
+            epub.read_file("toc.ncx")
+            return "toc.ncx"
         except Exception:
             pass
         return None
@@ -361,7 +367,11 @@ class ChaptersProcessor(BaseProcessor):
         return discovered
 
     def fix(self, epub: Any, issues: list[Issue], config: dict[str, Any]) -> list[Fix]:
-        """Generate an NCX file from XHTML headings and write it to the EPUB."""
+        """Generate an NCX file from XHTML headings and write it to the EPUB.
+
+        Uses the same NCX path resolution as :meth:`check` so the fix is
+        applied to the file that future checks will read from.
+        """
         extract_dir = getattr(epub, "_extract_dir", None)
         if extract_dir is None:
             return []
@@ -370,7 +380,8 @@ class ChaptersProcessor(BaseProcessor):
         if not discovered:
             return []
 
-        ncx_rel = self._find_ncx_rel(extract_dir)
+        # Use the same path resolution as check() — OPF first, fallback to rglob
+        ncx_rel = self._find_ncx_path(epub) or self._find_ncx_rel(extract_dir)
         self._write_ncx(extract_dir / ncx_rel, discovered, extract_dir)
 
         return [

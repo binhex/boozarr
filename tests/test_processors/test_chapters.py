@@ -646,6 +646,93 @@ class TestDiscoverChaptersMultiMatch:
         assert discovered[2][1] == "Epilogue"
 
 
+class TestFindNcxPathConsistency:
+    """Tests for NCX path consistency between check() and fix().
+
+    The critical invariant: check() and fix() must use the SAME NCX path so
+    that a fix applied in one run is properly verified on the next run.
+    """
+
+    def test_prefers_opf_path_over_root_toc_ncx(self, tmp_path: Path) -> None:
+        """_find_ncx_path must return the OPF-resolved path, not root toc.ncx,
+        when the OPF points to a different NCX file."""
+        epub_path = tmp_path / "book.epub"
+        with zipfile.ZipFile(epub_path, "w") as zf:
+            zf.writestr(
+                "META-INF/container.xml",
+                '<?xml version="1.0"?><container version="1.0" '
+                'xmlns="urn:oasis:names:tc:opendocument:xmlns:container">'
+                '<rootfiles><rootfile full-path="OEBPS/content.opf" '
+                'media-type="application/oebps-package+xml"/></rootfiles></container>',
+            )
+            zf.writestr(
+                "OEBPS/content.opf",
+                '<?xml version="1.0"?><package>'
+                "<manifest>"
+                '<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>'
+                '<item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/>'
+                "</manifest></package>",
+            )
+            # Root toc.ncx with only placeholder navPoint
+            zf.writestr(
+                "toc.ncx",
+                '<?xml version="1.0"?>'
+                '<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/">'
+                "<navMap>"
+                '<navPoint id="start" playOrder="1">'
+                "<navLabel><text>Start</text></navLabel>"
+                '<content src="titlepage.xhtml"/>'
+                "</navPoint>"
+                "</navMap></ncx>",
+            )
+            # OPF-referenced OEBPS/toc.ncx with no real chapters
+            zf.writestr(
+                "OEBPS/toc.ncx",
+                '<?xml version="1.0"?>'
+                '<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/">'
+                "<navMap>"
+                '<navPoint id="start" playOrder="1">'
+                "<navLabel><text>Start</text></navLabel>"
+                '<content src="titlepage.xhtml"/>'
+                "</navPoint>"
+                "</navMap></ncx>",
+            )
+            zf.writestr("OEBPS/ch1.xhtml", "<html><body><h1>Chapter 1</h1></body></html>")
+
+        wrapper = EpubWrapper(epub_path)
+        extract_dir = tmp_path / "extracted"
+        wrapper.extract(extract_dir)
+
+        processor = ChaptersProcessor()
+
+        # _find_ncx_path should return OEBPS/toc.ncx (OPF-resolved),
+        # NOT root toc.ncx which happens to exist but is not the canonical path
+        ncx_path = processor._find_ncx_path(wrapper)
+        assert ncx_path is not None
+        assert ncx_path.endswith("OEBPS/toc.ncx"), (
+            f"Expected OPF-resolved path ending with OEBPS/toc.ncx, got {ncx_path}"
+        )
+
+        # End-to-end: check should report 1 issue (both NCXs have only placeholders)
+        issues = processor.check(wrapper)
+        assert len(issues) == 1, f"Expected 1 issue, got {len(issues)}"
+
+        # fix should write to the SAME path that check reads from
+        fixes = processor.fix(wrapper, issues, {})
+        assert len(fixes) == 1
+        assert fixes[0].location.endswith("OEBPS/toc.ncx"), (
+            f"Expected fix location to be OEBPS/toc.ncx, got {fixes[0].location}"
+        )
+
+        # After repack, re-check should find chapters in the OPF-resolved NCX
+        wrapper.repack(epub_path)
+        wrapper2 = EpubWrapper(epub_path)
+        issues_after = processor.check(wrapper2)
+        assert len(issues_after) == 0, (
+            f"Expected 0 issues after fix (chapters should be found), got {len(issues_after)}"
+        )
+
+
 class TestChaptersProcessorIntegration:
     """Integration tests using real EpubWrapper and real EPUB files."""
 
@@ -935,6 +1022,116 @@ class TestChaptersProcessorIntegration:
             assert "I" in ncx_content
             assert "II" in ncx_content
             assert "III" in ncx_content
+
+
+class TestFindNcxRelFallback:
+    """Tests for _find_ncx_rel fallback path — reached when _find_ncx_path
+    returns None but .ncx files exist on disk (unreferenced in OPF)."""
+
+    def test_fallback_reached_when_opf_has_no_ncx_item(self, tmp_path: Path) -> None:
+        """When the OPF manifest has no NCX item, _find_ncx_path returns None,
+        and fix() falls back to _find_ncx_rel which finds .ncx via rglob."""
+        epub_path = tmp_path / "book.epub"
+        with zipfile.ZipFile(epub_path, "w") as zf:
+            zf.writestr(
+                "META-INF/container.xml",
+                '<?xml version="1.0"?><container version="1.0" '
+                'xmlns="urn:oasis:names:tc:opendocument:xmlns:container">'
+                '<rootfiles><rootfile full-path="content.opf" '
+                'media-type="application/oebps-package+xml"/></rootfiles></container>',
+            )
+            # OPF has NO NCX item in manifest — _search_opf_for_ncx returns None
+            zf.writestr(
+                "content.opf",
+                '<?xml version="1.0"?><package>'
+                "<manifest>"
+                '<item id="ch1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>'
+                "</manifest>"
+                '<spine><itemref idref="ch1"/></spine></package>',
+            )
+            # No root toc.ncx, but OEBPS/toc.ncx exists and is unreferenced
+            zf.writestr(
+                "OEBPS/toc.ncx",
+                '<?xml version="1.0"?>'
+                '<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/">'
+                "<navMap>"
+                '<navPoint id="start" playOrder="1">'
+                "<navLabel><text>Start</text></navLabel>"
+                '<content src="titlepage.xhtml"/>'
+                "</navPoint>"
+                "</navMap></ncx>",
+            )
+            zf.writestr(
+                "chapter1.xhtml",
+                "<html><body>" + "x" * 3000 + "</body></html>",
+            )
+
+        wrapper = EpubWrapper(epub_path)
+        extract_dir = tmp_path / "extracted"
+        wrapper.extract(extract_dir)
+
+        processor = ChaptersProcessor()
+
+        # _find_ncx_path returns None: OPF has no NCX item, no root toc.ncx
+        ncx_path = processor._find_ncx_path(wrapper)
+        assert ncx_path is None, f"Expected None, got {ncx_path}"
+
+        # _find_ncx_rel finds OEBPS/toc.ncx via rglob
+        ncx_rel = processor._find_ncx_rel(extract_dir)
+        assert ncx_rel == "OEBPS/toc.ncx", f"Expected OEBPS/toc.ncx, got {ncx_rel}"
+
+        # fix() uses the fallback and writes to OEBPS/toc.ncx
+        issues = processor.check(wrapper)
+        assert len(issues) == 1
+        fixes = processor.fix(wrapper, issues, {})
+        assert len(fixes) == 1
+        assert "OEBPS/toc.ncx" in fixes[0].location
+
+
+class TestDiscoverFromSpineOserror:
+    def test_handles_stat_oserror_during_size_check(self, tmp_path: Path, mocker: Any) -> None:
+        """_discover_from_spine handles OSError from stat() between is_file()
+        and stat(), e.g. file deleted by external process. Should skip that file."""
+        from pathlib import Path as _Path
+
+        extract_dir = tmp_path / "extracted"
+        extract_dir.mkdir()
+        opf_path = "content.opf"
+        opf_content = (
+            '<?xml version="1.0"?><package>'
+            "<manifest>"
+            '<item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/>'
+            '<item id="ch2" href="ch2.xhtml" media-type="application/xhtml+xml"/>'
+            "</manifest>"
+            '<spine><itemref idref="ch1"/><itemref idref="ch2"/></spine></package>'
+        )
+        (extract_dir / opf_path).write_text(opf_content)
+        (extract_dir / "ch1.xhtml").write_text("x" * 3000)
+        ch2 = extract_dir / "ch2.xhtml"
+        ch2.write_text("y" * 3000)
+
+        # Mock _Path.stat to raise OSError for ch2 only on its second
+        # call (the one inside the try/except OSError block).  The first
+        # call from is_file() must succeed so the OSError handler is reached.
+        original_stat = _Path.stat
+        stat_calls: list[str] = []
+        call_count: dict[str, int] = {}
+
+        def _mock_stat(self_inner: Any, **kwargs: Any) -> Any:
+            key = str(self_inner)
+            if key == str(ch2):
+                call_count[key] = call_count.get(key, 0) + 1
+                if call_count[key] >= 2:
+                    stat_calls.append(key)
+                    raise OSError("File vanished")
+            return original_stat(self_inner, **kwargs)
+
+        mocker.patch.object(_Path, "stat", _mock_stat)
+
+        discovered = ChaptersProcessor._discover_from_spine(extract_dir, opf_path)
+        assert len(discovered) == 1
+        assert discovered[0][0] == "ch1.xhtml"
+        assert len(stat_calls) == 1, "OSError should have been raised and caught for ch2"
 
 
 class TestFixEdgeCases:
