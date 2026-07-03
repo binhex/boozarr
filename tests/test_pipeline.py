@@ -41,6 +41,19 @@ class _ModifyingProcessor:
         return [MagicMock()]
 
 
+class _UnfixableProcessor:
+    """A test processor whose check() finds issues but fix() returns empty
+    (simulates fix_possible=False issues like broken links)."""
+
+    name = "unfixable"
+
+    def check(self, epub: object, config: dict | None = None) -> list:
+        return [MagicMock(description="Test unreachable link found")]
+
+    def fix(self, epub: object, issues: list, config: dict) -> list:
+        return []
+
+
 class TestPipelineFixBehaviour:
     """Integration tests for --fix extract/repack/backup behaviour."""
 
@@ -150,6 +163,24 @@ class TestPipelineFixBehaviour:
         assert "10px" in detail, f"Expected '10px' (old_value) in fix_detail, got: {detail}"
         assert "1px" in detail, f"Expected '1px' (new_value) in fix_detail, got: {detail}"
         assert "→" in detail or "==" in detail, f"Expected '→' or '==' arrow in fix_detail, got: {detail}"
+
+    def test_issue_details_in_fix_details_when_no_fix(self, tmp_path: Path) -> None:
+        """When a processor finds issues but returns no fixes, the
+        fix_details should contain the issue descriptions so the user can
+        see what's wrong."""
+        epub_path = tmp_path / "input.epub"
+        _make_epub(epub_path)
+
+        db = MagicMock(spec_set=["lookup_hash", "record_file", "log_event"])
+        db.lookup_hash.return_value = None
+
+        pipeline = Pipeline(db=db, processors=[_UnfixableProcessor()], config={}, fix=True)
+        result = pipeline.process_epub(epub_path)
+
+        assert result["status"] != "error", f"Pipeline failed: {result}"
+        assert "Test unreachable link found" in str(result["fix_details"]), (
+            f"Issue description should appear in fix_details, got: {result['fix_details']}"
+        )
 
 
 class TestPipelineConfigAwareSkip:

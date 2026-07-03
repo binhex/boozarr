@@ -168,6 +168,9 @@ class Pipeline:
                         )
                         for fix in fixes:
                             fix_details.append(self._format_fix_detail(proc, fix))
+                    else:
+                        for iss in issues:
+                            fix_details.append(f"{proc.name}: {iss.description}")
             except Exception:
                 self.db.log_event(str(epub_path), proc.name, "error", traceback.format_exc())
                 overall = STATUS_ERROR
