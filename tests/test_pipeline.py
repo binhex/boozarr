@@ -438,6 +438,25 @@ class TestFormatFixDetail:
         result = Pipeline._format_fix_detail(mock_proc, fix)
         assert " → " in result, f"Expected ' → ' in '{result}'"
 
+    def test_chapters_fix_uses_plain_english_not_raw_xml(self) -> None:
+        """When a Fix has both empty old_value and new_value, the formatter
+        should use the description, not show XML tags or '?' placeholders."""
+        from boozarr.processors.base import Fix
+
+        mock_proc = MagicMock()
+        mock_proc.name = "chapters"
+        fix = Fix(
+            processor="chapters",
+            location="OEBPS/toc.ncx",
+            description="Added 2 chapter entries to OEBPS/toc.ncx",
+            old_value="",
+            new_value="",
+        )
+        result = Pipeline._format_fix_detail(mock_proc, fix)
+        assert "<navMap>" not in result, f"Raw XML should not appear in output: {result}"
+        assert "?" not in result, f"Placeholder '?' should not appear in output: {result}"
+        assert "Added 2 chapter" in result, f"Description should be used: {result}"
+
     def test_empty_old_new_uses_description_only(self) -> None:
         """When old_value and new_value are both empty/falsy, just return description."""
         from boozarr.processors.base import Fix

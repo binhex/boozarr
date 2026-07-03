@@ -379,7 +379,7 @@ class ChaptersProcessor(BaseProcessor):
                 ncx_rel,
                 f"Added {len(discovered)} chapter entries to {ncx_rel}",
                 old_value="",
-                new_value=f"<navMap>{len(discovered)} entries</navMap>",
+                new_value="",
             )
         ]
 
